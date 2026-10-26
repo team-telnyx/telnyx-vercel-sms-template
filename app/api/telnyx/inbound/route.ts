@@ -41,7 +41,9 @@ export async function POST(req: Request) {
 
   // Example: reply to an inbound "PING". Replace with your own logic.
   if (event_type === "message.received" && payload.from && payload.text?.trim().toUpperCase() === "PING") {
-    sendSms(payload.from.phone_number, "PONG from your Vercel project").catch((e) =>
+    // Await the reply: Vercel stops the function once the response is sent,
+    // so a fire-and-forget send would never go out.
+    await sendSms(payload.from.phone_number, "PONG from your Vercel project").catch((e) =>
       console.error("reply failed", e),
     );
   }
