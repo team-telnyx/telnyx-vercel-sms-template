@@ -3,11 +3,16 @@ import { sendSms, verifyTelnyxSignature } from "@/lib/telnyx";
 /**
  * Inbound SMS + delivery receipts from Telnyx.
  *
+ * The integration points your messaging profile here when you connect the
+ * number to this project (TELNYX_MESSAGING_WEBHOOK_URL holds the URL).
+ *
  * Rules that matter:
  *  - Verify the signature first and fail closed (401). Never trust the body.
  *  - Answer 2xx within 2 seconds; Telnyx retries and fails over otherwise.
- *    Do slow work after responding (queue it, or keep it short like here).
+ *    Keep the work short (like here) or hand it to a queue.
  *  - Retries and failover can deliver the same event twice: dedupe on data.id.
+ *    The in-memory set below is per function instance, so it is best effort;
+ *    use a store (Redis, a database) when duplicates matter.
  */
 const seen = new Map<string, number>();
 function alreadySeen(id: string): boolean {
@@ -18,7 +23,18 @@ function alreadySeen(id: string): boolean {
   return false;
 }
 
+type TelnyxEvent = {
+  data?: {
+    id?: string;
+    event_type?: string;
+    payload?: { from?: { phone_number?: string }; text?: string; to?: { status?: string }[] };
+  };
+};
+
 export async function POST(req: Request) {
+  if (!process.env.TELNYX_PUBLIC_KEY) {
+    console.error("TELNYX_PUBLIC_KEY is not set: every webhook is refused. Connect the number to this project and redeploy.");
+  }
   const raw = await req.text();
   const ok = verifyTelnyxSignature(
     raw,
@@ -27,24 +43,35 @@ export async function POST(req: Request) {
   );
   if (!ok) return new Response("invalid signature", { status: 401 });
 
-  const event = JSON.parse(raw) as {
-    data: {
-      id: string;
-      event_type: string;
-      payload: { from?: { phone_number: string }; text?: string; direction?: string };
-    };
-  };
-  if (alreadySeen(event.data.id)) return Response.json({ ok: true, duplicate: true });
+  let event: TelnyxEvent;
+  try {
+    event = JSON.parse(raw) as TelnyxEvent;
+  } catch {
+    return new Response("bad json", { status: 400 });
+  }
+  const id = event.data?.id;
+  const eventType = event.data?.event_type;
+  const payload = event.data?.payload ?? {};
+  if (!id || !eventType) return Response.json({ ok: true, ignored: true });
+  if (alreadySeen(id)) return Response.json({ ok: true, duplicate: true });
 
-  const { event_type, payload } = event.data;
-  console.log("telnyx event", event_type, payload.from?.phone_number, payload.text);
+  if (eventType === "message.received") {
+    console.log("inbound sms", payload.from?.phone_number, payload.text);
+  } else {
+    // message.sent / message.finalized: delivery receipts for what you sent.
+    console.log("telnyx event", eventType, payload.to?.[0]?.status);
+  }
 
-  // Example: reply to an inbound "PING". Replace with your own logic.
-  if (event_type === "message.received" && payload.from && payload.text?.trim().toUpperCase() === "PING") {
+  // Example: reply PONG to an inbound "PING". Replace with your own logic.
+  // Replies go to US numbers only (the messaging profile allows US
+  // destinations only). Before your 10DLC campaign is approved, US carriers
+  // block the reply to ordinary US mobiles; it still reaches Telnyx numbers.
+  const from = payload.from?.phone_number;
+  if (eventType === "message.received" && from && payload.text?.trim().toUpperCase() === "PING") {
     // Await the reply: Vercel stops the function once the response is sent,
     // so a fire-and-forget send would never go out.
-    await sendSms(payload.from.phone_number, "PONG from your Vercel project").catch((e) =>
-      console.error("reply failed", e),
+    await sendSms(from, "PONG from your Vercel project").catch((e) =>
+      console.error("PONG reply failed", e instanceof Error ? e.message : e),
     );
   }
   return Response.json({ ok: true });
