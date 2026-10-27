@@ -90,7 +90,8 @@ export function verifyTelnyxSignature(
  */
 export function checkSendPassword(given: unknown, expected = process.env.SEND_FORM_PASSWORD): boolean {
   if (!expected || typeof given !== "string") return false;
-  const a = crypto.createHash("sha256").update(given).digest();
-  const b = crypto.createHash("sha256").update(expected).digest();
-  return crypto.timingSafeEqual(a, b);
+  const a = Buffer.from(given, "utf8");
+  const b = Buffer.from(expected, "utf8");
+  // Only the length can leak here, never the content.
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
