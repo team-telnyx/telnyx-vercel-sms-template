@@ -10,20 +10,20 @@ import { checkSendPassword, sendSms, TelnyxError, US_E164 } from "@/lib/telnyx";
 export async function POST(req: Request) {
   if (!process.env.SEND_FORM_PASSWORD) {
     return Response.json(
-      { error: "Sending is disabled: set SEND_FORM_PASSWORD in your Vercel project settings and redeploy." },
+      { error: "Sending is off. Set SEND_FORM_PASSWORD in your Vercel project settings and redeploy." },
       { status: 403 },
     );
   }
   const body = (await req.json().catch(() => null)) as { to?: unknown; text?: unknown; password?: unknown } | null;
   if (!checkSendPassword(body?.password)) {
-    return Response.json({ error: "Wrong password." }, { status: 401 });
+    return Response.json({ error: "The password is incorrect." }, { status: 401 });
   }
   const to = typeof body?.to === "string" ? body.to.replace(/[\s()-]/g, "") : "";
   const text = typeof body?.text === "string" ? body.text.trim() : "";
-  if (!to || !text) return Response.json({ error: "to and text are required" }, { status: 400 });
+  if (!to || !text) return Response.json({ error: "Enter a phone number and a message." }, { status: 400 });
   if (!US_E164.test(to)) {
     return Response.json(
-      { error: "Use a US number in E.164 format, e.g. +14155550123. This integration sends to US destinations only." },
+      { error: "Enter a US phone number in E.164 format, for example +14155550123. This integration only sends to US numbers." },
       { status: 400 },
     );
   }

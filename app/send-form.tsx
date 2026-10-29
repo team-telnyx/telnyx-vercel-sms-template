@@ -10,7 +10,7 @@ export function SendForm({ disabled }: { disabled: boolean }) {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
-    setResult("sending…");
+    setResult("Sending…");
     try {
       const res = await fetch("/api/send", {
         method: "POST",
@@ -20,11 +20,11 @@ export function SendForm({ disabled }: { disabled: boolean }) {
       const json = (await res.json().catch(() => ({}))) as { id?: string; status?: string; error?: string };
       setResult(
         res.ok
-          ? `Accepted by Telnyx (id ${json.id}${json.status ? `, ${json.status}` : ""}). Delivery receipts arrive at /api/telnyx/inbound.`
-          : `Failed: ${json.error ?? `HTTP ${res.status}`}`,
+          ? `Telnyx accepted the message${json.status ? ` with status ${json.status}` : ""}. Message ID ${json.id}. Delivery receipts arrive at /api/telnyx/inbound.`
+          : `Not sent. ${json.error ?? `The server returned HTTP ${res.status}.`}`,
       );
     } catch (err) {
-      setResult(`Failed: ${err instanceof Error ? err.message : String(err)}`);
+      setResult(`Not sent. ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setBusy(false);
     }
@@ -32,7 +32,7 @@ export function SendForm({ disabled }: { disabled: boolean }) {
   return (
     <form onSubmit={submit} style={{ display: "grid", gap: 8, margin: "16px 0" }}>
       <label>
-        To (US number)
+        To (US phone number)
         <input style={{ width: "100%" }} placeholder="+14155550123" inputMode="tel" value={to} onChange={(e) => setTo(e.target.value)} disabled={disabled} required />
       </label>
       <label>
@@ -40,7 +40,7 @@ export function SendForm({ disabled }: { disabled: boolean }) {
         <input style={{ width: "100%" }} value={text} onChange={(e) => setText(e.target.value)} disabled={disabled} required maxLength={1600} />
       </label>
       <label>
-        Password (SEND_FORM_PASSWORD)
+        Send form password
         <input style={{ width: "100%" }} type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} disabled={disabled} required />
       </label>
       <button type="submit" disabled={disabled || busy}>Send SMS</button>

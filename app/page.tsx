@@ -11,27 +11,30 @@ export default function Home() {
       <h1>Telnyx SMS on Vercel</h1>
       {configured ? (
         <p>
-          Your number is <code>{number}</code>. Text it from any phone and the message arrives at{" "}
-          <code>/api/telnyx/inbound</code> (see your function logs).
+          Your number is <code>{number}</code>. Text it from any phone, and the message appears in your
+          function logs for <code>/api/telnyx/inbound</code>.
         </p>
       ) : key ? (
         <p>
-          <b>Waiting for your number.</b> Telnyx assigns it after a one-time identity check (an ID
-          and a selfie; accepted within minutes in most cases, up to 24 hours). Open <b>Telnyx</b>{" "}
-          from the integration page in Vercel to start or check it. When the number is assigned,{" "}
-          <code>TELNYX_PHONE_NUMBER</code> is added to this project: redeploy to pick it up.
+          <b>Waiting for your phone number.</b> Telnyx assigns it after a one-time identity check with a
+          government photo ID and a selfie. Most checks finish within a few minutes, and some take up to
+          24 hours. To start or check it, open <b>Telnyx</b> from the integration page in Vercel. When
+          the number is assigned, Vercel adds <code>TELNYX_PHONE_NUMBER</code> to this project. Redeploy
+          to use it.
         </p>
       ) : (
         <p>
-          No Telnyx number yet. Add <b>Telnyx</b> from the Vercel Marketplace and connect it to this
-          project; the <code>TELNYX_*</code> environment variables appear automatically. Then redeploy.
+          No Telnyx phone number yet. Add <b>Telnyx</b> from the Vercel Marketplace and connect it to
+          this project. Vercel adds the <code>TELNYX_*</code> environment variables automatically. Then
+          redeploy.
         </p>
       )}
       {configured && !webhook ? (
         <p>
           <small>
-            Incoming texts are not routed here yet: connect the number to this project in Vercel (or set
-            the inbound webhook on the number to <code>https://&lt;your-domain&gt;/api/telnyx/inbound</code>).
+            Incoming texts don&apos;t reach this project yet. In Vercel, connect the phone number to this
+            project. You can also set the number&apos;s inbound webhook to{" "}
+            <code>https://&lt;your-domain&gt;/api/telnyx/inbound</code> yourself.
           </small>
         </p>
       ) : null}
@@ -41,30 +44,34 @@ export default function Home() {
         <p>
           <small>
             Sending from this page is off until you set <code>SEND_FORM_PASSWORD</code> in the project&apos;s
-            environment variables and redeploy. It stops strangers from texting on your balance.
+            environment variables and redeploy. The password stops strangers from sending texts on your
+            balance.
           </small>
         </p>
       ) : null}
       <SendForm disabled={!configured || !hasPassword} />
 
-      <h2>What works before US registration (10DLC)</h2>
+      <h2>Before US messaging registration</h2>
       <p>
-        US carriers block texts from business numbers until the number&apos;s 10DLC brand and campaign
-        are approved. Register from the <b>Messaging</b> page of the Telnyx dashboard (open <b>Telnyx</b>{" "}
-        from the integration in Vercel). Fees come out of your prepaid balance; carrier review typically
-        takes 1–7 business days, and your number is attached automatically once approved.
+        US carriers only deliver texts from registered business numbers. This registration is called
+        10DLC. To register, open <b>Telnyx</b> from the integration page in Vercel and go to{" "}
+        <b>Messaging</b>. You register your brand and submit a campaign that describes your messages.
+        Telnyx reviews the campaign, usually in 1 to 3 business days, and the carriers then take about 3
+        business days. The fees are shown before you submit and are paid from your prepaid balance. Your
+        number is added to the campaign automatically once it&apos;s approved.
       </p>
       <ul>
         <li>
-          <b>Works now:</b> receiving texts from any phone, in any country; sending to other US Telnyx
-          numbers; the signature check, delivery receipts and your code paths.
+          <b>Works now.</b> Receiving texts from any phone in any country, sending to other US Telnyx
+          numbers, signature checks and delivery receipts.
         </li>
         <li>
-          <b>Waits for approval:</b> texts (including the PONG reply) to ordinary US mobiles. Until then
-          the send is refused, or fails with a carrier error in its delivery receipt.
+          <b>Works after approval.</b> Texts to US mobile phones, including the PONG reply. Until then,
+          Telnyx refuses the send or the delivery receipt reports a carrier error.
         </li>
         <li>
-          <b>Never:</b> texts to numbers outside the US. The messaging profile allows US destinations only.
+          <b>Never works.</b> Texts to numbers outside the US. The messaging profile only allows US
+          destinations.
         </li>
       </ul>
 
@@ -75,9 +82,9 @@ export default function Home() {
           <code>SEND_FORM_PASSWORD</code>.
         </li>
         <li>
-          <code>app/api/telnyx/inbound/route.ts</code> receives inbound messages and delivery receipts,
-          verifies the Ed25519 signature with <code>TELNYX_PUBLIC_KEY</code>, dedupes, and replies{" "}
-          <b>PONG</b> to <b>PING</b>.
+          <code>app/api/telnyx/inbound/route.ts</code> receives incoming texts and delivery receipts,
+          verifies their Ed25519 signature with <code>TELNYX_PUBLIC_KEY</code>, skips duplicates, and
+          replies <b>PONG</b> to <b>PING</b>.
         </li>
       </ol>
     </main>

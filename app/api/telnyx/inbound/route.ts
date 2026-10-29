@@ -33,7 +33,7 @@ type TelnyxEvent = {
 
 export async function POST(req: Request) {
   if (!process.env.TELNYX_PUBLIC_KEY) {
-    console.error("TELNYX_PUBLIC_KEY is not set: every webhook is refused. Connect the number to this project and redeploy.");
+    console.error("TELNYX_PUBLIC_KEY isn't set, so every webhook is refused. Connect the phone number to this project and redeploy.");
   }
   const raw = await req.text();
   const ok = verifyTelnyxSignature(
