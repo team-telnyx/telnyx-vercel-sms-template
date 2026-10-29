@@ -25,7 +25,7 @@ export async function sendSms(to: string, text: string) {
   const from = process.env.TELNYX_PHONE_NUMBER;
   if (!key || !from) {
     throw new TelnyxError(
-      "TELNYX_API_KEY or TELNYX_PHONE_NUMBER is not set. Connect your Telnyx number to this project in Vercel and redeploy.",
+      "TELNYX_API_KEY or TELNYX_PHONE_NUMBER isn't set. Connect your Telnyx phone number to this project in Vercel and redeploy.",
       500,
     );
   }
