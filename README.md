@@ -2,9 +2,11 @@
 
 A small Next.js app for a Telnyx phone number bought through the [Vercel Marketplace](https://vercel.com/marketplace/telnyx). It sends SMS from a password-protected form, receives incoming texts and delivery receipts on a signed webhook, and replies **PONG** to **PING**.
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fteam-telnyx%2Ftelnyx-vercel-sms-template&project-name=telnyx-sms&repository-name=telnyx-sms&products=%5B%7B%22type%22%3A%22integration%22%2C%22integrationSlug%22%3A%22telnyx%22%2C%22productSlug%22%3A%22phone-number%22%2C%22protocol%22%3A%22storage%22%7D%5D&env=SEND_FORM_PASSWORD&envDescription=Choose%20a%20password%20for%20the%20send%20form.%20It%20stops%20strangers%20from%20sending%20texts%20on%20your%20Telnyx%20balance.&envLink=https%3A%2F%2Fgithub.com%2Fteam-telnyx%2Ftelnyx-vercel-sms-template%23environment-variables)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fteam-telnyx%2Ftelnyx-vercel-sms-template&project-name=telnyx-sms&repository-name=telnyx-sms&stores=%5B%7B%22type%22%3A%22integration%22%2C%22integrationSlug%22%3A%22telnyx%22%2C%22productSlug%22%3A%22phone-number%22%7D%5D&env=SEND_FORM_PASSWORD&envDescription=Choose%20a%20password%20for%20the%20send%20form.%20It%20stops%20strangers%20from%20sending%20texts%20on%20your%20Telnyx%20balance.&envLink=https%3A%2F%2Fgithub.com%2Fteam-telnyx%2Ftelnyx-vercel-sms-template%23environment-variables)
 
 The button clones this repo, asks you to choose a `SEND_FORM_PASSWORD`, and adds the Telnyx *SMS Phone Number (US)* product to the new project.
+
+The full setup guide, including costs, 10DLC registration, support and uninstalling, is at [telnyx-vercel-integration.vercel.app/docs](https://telnyx-vercel-integration.vercel.app/docs).
 
 ## Before you start
 
