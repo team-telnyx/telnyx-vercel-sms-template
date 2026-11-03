@@ -1,3 +1,4 @@
+import { CallForm } from "./call-form";
 import { SendForm } from "./send-form";
 
 export default function Home() {
@@ -6,6 +7,7 @@ export default function Home() {
   const hasPassword = Boolean(process.env.SEND_FORM_PASSWORD);
   const webhook = process.env.TELNYX_MESSAGING_WEBHOOK_URL;
   const configured = Boolean(key && number);
+  const voice = configured && Boolean(process.env.TELNYX_CONNECTION_ID);
   return (
     <main>
       <h1>Telnyx SMS on Vercel</h1>
@@ -51,6 +53,25 @@ export default function Home() {
       ) : null}
       <SendForm disabled={!configured || !hasPassword} />
 
+      {voice ? (
+        <>
+          <h2>Calls</h2>
+          <p>
+            Call <code>{number}</code> to hear your function answer. It reads a short menu: press 1 to
+            hear a message, or 2 to hang up. Each step shows up in your function logs for{" "}
+            <code>/api/telnyx/voice</code>.
+          </p>
+          <p>
+            Or have your number call you. When you answer, it speaks a short message and hangs up. It
+            uses the same password as the send form, and only calls US numbers.
+          </p>
+          <CallForm disabled={!hasPassword} />
+          <p>
+            <small>This number can&apos;t call 911.</small>
+          </p>
+        </>
+      ) : null}
+
       <h2>Before US messaging registration</h2>
       <p>
         US carriers only deliver texts from registered business numbers. This registration is called
@@ -86,6 +107,13 @@ export default function Home() {
           verifies their Ed25519 signature with <code>TELNYX_PUBLIC_KEY</code>, skips duplicates, and
           replies <b>PONG</b> to <b>PING</b>.
         </li>
+        {voice ? (
+          <li>
+            <code>app/api/telnyx/voice/route.ts</code> answers incoming calls and drives each call with
+            Call Control commands. <code>app/api/call/route.ts</code> places a call with{" "}
+            <code>POST /v2/calls</code>.
+          </li>
+        ) : null}
       </ol>
     </main>
   );

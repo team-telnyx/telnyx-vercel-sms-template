@@ -1,6 +1,7 @@
 /**
- * Minimal Telnyx helpers for this template: send an SMS, and verify the
- * Ed25519 signature Telnyx puts on every webhook. No SDK needed.
+ * Minimal Telnyx helpers for this template: send an SMS, answer and place
+ * calls, and verify the Ed25519 signature Telnyx puts on every webhook.
+ * No SDK needed.
  */
 import crypto from "node:crypto";
 
@@ -49,6 +50,73 @@ export async function sendSms(to: string, text: string) {
     throw new TelnyxError(`Telnyx ${res.status}${e?.code ? ` (code ${e.code})` : ""}: ${what}`, res.status, e?.code);
   }
   return json.data;
+}
+
+type TelnyxErrors = { errors?: { code?: string; title?: string; detail?: string }[] };
+
+async function telnyxPost<T>(path: string, body: unknown): Promise<T> {
+  const key = process.env.TELNYX_API_KEY;
+  if (!key) {
+    throw new TelnyxError(
+      "TELNYX_API_KEY isn't set. Connect your Telnyx phone number to this project in Vercel and redeploy.",
+      500,
+    );
+  }
+  const res = await fetch(`${API}${path}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const json = (await res.json().catch(() => ({}))) as { data?: T } & TelnyxErrors;
+  if (!res.ok) {
+    const e = json.errors?.[0];
+    const what = e?.detail || e?.title || `HTTP ${res.status}`;
+    throw new TelnyxError(`Telnyx ${res.status}${e?.code ? ` (code ${e.code})` : ""}: ${what}`, res.status, e?.code);
+  }
+  return json.data as T;
+}
+
+/** What we keep in a call's client_state. Each webhook is a separate invocation, so the call carries its own state. */
+export type CallState = { step: string };
+
+export function encodeState(state: CallState): string {
+  return Buffer.from(JSON.stringify(state)).toString("base64");
+}
+
+export function decodeState(clientState: unknown): CallState | null {
+  if (typeof clientState !== "string" || !clientState) return null;
+  try {
+    const parsed = JSON.parse(Buffer.from(clientState, "base64").toString("utf8")) as { step?: unknown };
+    return typeof parsed.step === "string" ? { step: parsed.step } : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Send a Call Control command, such as answer, speak, gather_using_speak or
+ * hangup. Await it: Vercel stops the function once the response is sent.
+ */
+export async function callAction(callControlId: string, action: string, body: Record<string, unknown> = {}) {
+  return telnyxPost<unknown>(`/calls/${encodeURIComponent(callControlId)}/actions/${action}`, body);
+}
+
+/** Place a call from your Telnyx number. Its webhooks go to the Call Control app's URL (/api/telnyx/voice). */
+export async function dial(to: string, state: CallState) {
+  const connectionId = process.env.TELNYX_CONNECTION_ID;
+  const from = process.env.TELNYX_PHONE_NUMBER;
+  if (!connectionId || !from) {
+    throw new TelnyxError(
+      "TELNYX_CONNECTION_ID or TELNYX_PHONE_NUMBER isn't set. Connect your Telnyx phone number to this project in Vercel and redeploy.",
+      500,
+    );
+  }
+  return telnyxPost<{ call_control_id: string; call_session_id?: string }>("/calls", {
+    connection_id: connectionId,
+    from,
+    to,
+    client_state: encodeState(state),
+  });
 }
 
 // SubjectPublicKeyInfo header for a raw Ed25519 key (RFC 8410).
