@@ -1,4 +1,4 @@
-import { sendSms, verifyTelnyxSignature } from "@/lib/telnyx";
+import { sendSms, verifyTelnyxWebhook } from "@/lib/telnyx";
 
 /**
  * Inbound SMS + delivery receipts from Telnyx.
@@ -35,20 +35,15 @@ export async function POST(req: Request) {
   if (!process.env.TELNYX_PUBLIC_KEY) {
     console.error("TELNYX_PUBLIC_KEY isn't set, so every webhook is refused. Connect the phone number to this project and redeploy.");
   }
+  // Verify against the exact raw body: parsing it first would break the signature.
   const raw = await req.text();
-  const ok = verifyTelnyxSignature(
-    raw,
-    req.headers.get("telnyx-signature-ed25519"),
-    req.headers.get("telnyx-timestamp"),
-  );
-  if (!ok) return new Response("invalid signature", { status: 401 });
-
-  let event: TelnyxEvent;
+  let event: TelnyxEvent | null;
   try {
-    event = JSON.parse(raw) as TelnyxEvent;
+    event = await verifyTelnyxWebhook<TelnyxEvent>(raw, req.headers);
   } catch {
     return new Response("bad json", { status: 400 });
   }
+  if (!event) return new Response("invalid signature", { status: 401 });
   const id = event.data?.id;
   const eventType = event.data?.event_type;
   const payload = event.data?.payload ?? {};
