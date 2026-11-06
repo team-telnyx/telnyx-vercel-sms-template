@@ -8,6 +8,38 @@ The button clones this repo, asks you to choose a `SEND_FORM_PASSWORD`, and adds
 
 The full setup guide, including costs, 10DLC registration, support and uninstalling, is at [telnyx-vercel-integration.vercel.app/docs](https://telnyx-vercel-integration.vercel.app/docs).
 
+## Set it up with a coding agent
+
+This repo has an agent skill, [`skills/telnyx-vercel-sms`](skills/telnyx-vercel-sms/SKILL.md), that covers installing with the Vercel CLI, the environment variables, sending, receiving, 10DLC and common errors. Install it into your project with:
+
+```sh
+npx skills add team-telnyx/telnyx-vercel-sms-template --skill telnyx-vercel-sms
+```
+
+Then paste this prompt into your coding agent:
+
+```text
+Add a Telnyx US SMS number to this project using the Vercel CLI.
+
+1. Use the telnyx-vercel-sms skill. If it isn't installed, run
+   `npx skills add team-telnyx/telnyx-vercel-sms-template --skill telnyx-vercel-sms`
+   or read https://github.com/team-telnyx/telnyx-vercel-sms-template/blob/main/skills/telnyx-vercel-sms/SKILL.md
+2. Find the integration with `vercel integration discover telnyx` and check the
+   plan and options with `vercel integration add telnyx/phone-number --help`.
+3. Link this directory with `vercel link`, then run
+   `vercel integration add telnyx/phone-number --plan telnyx-prepaid`.
+   If the CLI asks me to accept terms or add credit in the browser, tell me and wait.
+4. Ask me to complete the identity check (`vercel integration open telnyx`) and wait
+   until TELNYX_PHONE_NUMBER is set.
+5. Make sure the number is connected to this project, run `vercel env pull .env.local`,
+   and read `vercel integration guide telnyx --framework nextjs`.
+6. Add a send route protected by auth, and a signed inbound route at
+   app/api/telnyx/inbound, as the skill describes. Deploy to production, then help me
+   check that sending and receiving work.
+```
+
+The agent can't accept the terms, pay or do the identity check for you. It will stop and ask when it's your turn.
+
 ## Before you start
 
 - **US only.** Numbers are US local numbers, and they can only send to US numbers.
