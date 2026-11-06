@@ -27,8 +27,9 @@ Add a Telnyx US SMS number to this project using the Vercel CLI.
 2. Find the integration with `vercel integration discover telnyx` and check the
    plan and options with `vercel integration add telnyx/phone-number --help`.
 3. Link this directory with `vercel link`, then run
-   `vercel integration add telnyx/phone-number --plan telnyx-prepaid`.
-   If the CLI asks me to accept terms or add credit in the browser, tell me and wait.
+   `vercel integration add telnyx/phone-number --billing-plan telnyx-prepaid`.
+   If the CLI stops with a link to accept terms or add credit, give me the link,
+   wait for me, then run the next command it suggests.
 4. Ask me to complete the identity check (`vercel integration open telnyx`) and wait
    until TELNYX_PHONE_NUMBER is set.
 5. Make sure the number is connected to this project, run `vercel env pull .env.local`,
@@ -44,7 +45,7 @@ The agent can't accept the terms, pay or do the identity check for you. It will 
 
 - **US only.** Numbers are US local numbers, and they can only send to US numbers.
 - **Prepaid balance.** You add funds in Vercel, starting at $10. Your prepaid balance pays for the number at $1 a month, for messages, and for US messaging registration fees, all at public Telnyx rates. For a refund, contact Telnyx support.
-- **Identity check.** Telnyx creates an account for your Vercel team. Before Telnyx assigns a phone number, the account owner completes a one-time identity check with a government photo ID and a selfie. Onfido runs the check for Telnyx. Most checks finish within a few minutes, and some take up to 24 hours. To start it, open **Telnyx** from the integration page in Vercel.
+- **Identity check.** Telnyx creates an account for your Vercel team. Before Telnyx assigns a phone number, a Vercel team admin completes a one-time identity check with a government photo ID and a selfie. Onfido runs the check for Telnyx. Most checks finish within a few minutes, and some take up to 24 hours. To start it, open **Telnyx** from the integration page in Vercel.
 - **US messaging registration.** Texts to US mobile phones need a registered brand and campaign. See [What works before registration](#what-works-before-registration).
 
 ## Run it

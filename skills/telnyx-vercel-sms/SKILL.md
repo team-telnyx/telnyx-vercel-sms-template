@@ -16,14 +16,14 @@ Working example app: https://github.com/team-telnyx/telnyx-vercel-sms-template
 - **Prepaid.** Credit is bought in Vercel, from $10. The number is $1 a month; texts and 10DLC fees come out of the same balance.
 - **A person has to do two things.** Accept the terms and pay for credit in Vercel, then pass a one-time identity check (government photo ID and a selfie). You cannot do either for them. Tell the user when it is their turn and wait.
 - **Texting US mobile phones needs 10DLC registration**, which takes about a week. Until then, sends to ordinary US mobiles fail. Receiving texts and texting other Telnyx numbers work straight away.
-- **One Telnyx account per team email.** If the Vercel team's email address already has a Telnyx account, the install can't continue. Linking an existing Telnyx account isn't supported.
+- **One Telnyx account per email address.** Each install creates a new Telnyx account under the Vercel team's email. If that address already has a Telnyx account, the integration retries with a plus-address of the same mailbox (`name+vercel-…@company.com`). Free email providers (Gmail, Outlook, Yahoo, iCloud and others) treat that as the same address, so for them the install stops. Linking an existing Telnyx account isn't supported yet.
 
 ## 1. Find and install with the Vercel CLI
 
 Use a current CLI (`npm i -g vercel@latest`), signed in (`vercel login`), and run everything from the app's directory.
 
 ```sh
-vercel link --yes                                # or: vercel link --project <name> --team <team>
+vercel link --yes                                # or: vercel link --yes --project <name> --scope <team>
 vercel integration discover telnyx --format=json  # shows the product slug telnyx/phone-number
 vercel integration add telnyx/phone-number --help # shows the plan and the metadata keys
 vercel integration guide telnyx --framework nextjs
@@ -32,10 +32,10 @@ vercel integration guide telnyx --framework nextjs
 Install the product, connected to the linked project:
 
 ```sh
-vercel integration add telnyx/phone-number --plan telnyx-prepaid
+vercel integration add telnyx/phone-number --billing-plan telnyx-prepaid
 ```
 
-Optional metadata, each as `-m KEY=VALUE`:
+Optional metadata, each as `--meta KEY=VALUE`:
 
 | Key | What it does |
 | --- | --- |
@@ -43,16 +43,22 @@ Optional metadata, each as `-m KEY=VALUE`:
 | `webhook_url` | Your own https URL for incoming texts. Leave it out and the integration uses the connected project (see step 3). |
 | `webhook_failover_url` | An https URL Telnyx tries if the main one fails. |
 
-The first install on a team opens the browser so a person can accept the Telnyx terms and add credit (at least $10). The CLI waits and carries on once that's done. Ask the user to finish it in the browser.
+CLI 55 and older call these flags `--plan` and `-m`. Newer CLIs still accept those as deprecated aliases. Check `vercel integration add telnyx/phone-number --help` if a flag is refused.
 
-When it finishes, `vercel integration add` connects the resource to the linked project and runs `vercel env pull`. Pass `--no-connect` to skip both. Use `-e production -e preview` to connect only some environments; the default is all three.
+The first install on a team needs a person in the browser, to accept the Telnyx terms and to buy credit (at least $10). The CLI can't do either:
+
+- In an agent or other non-interactive shell, the CLI doesn't wait. It exits with `"status": "action_required"`, a `verification_uri` and a `next` command. Give the user the URL, wait until they say it's done, then run the `next` command.
+- In an interactive terminal the user accepts the terms at the prompt, or in the browser the CLI opens (it waits up to 5 minutes). If credit still has to be bought, the CLI opens the setup page, prints "Additional setup required" and exits.
+- Either way, confirm the resource exists afterwards with `vercel integration list --integration telnyx`. Then connect it (step 3) if it isn't connected, and run `vercel env pull`.
+
+When the CLI provisions the resource itself, it also connects it to the linked project and runs `vercel env pull`. Pass `--no-connect` to skip both. Use `-e production -e preview` to connect only some environments; the default is all three.
 
 ## 2. The identity check (the user does this)
 
 Telnyx assigns the phone number only after a one-time identity check. Ask the user to open the Telnyx dashboard:
 
 ```sh
-vercel integration open telnyx
+vercel integration open telnyx          # add --json to print the sign-in link instead of opening a browser
 ```
 
 There, a Vercel team admin selects **Start identity check** and follows the steps (photo of an ID, then a selfie, about 3 minutes). Most checks pass within minutes; a manual review can take up to 24 hours. When it passes, Telnyx assigns the number and adds `TELNYX_PHONE_NUMBER` to the resource, usually within a minute.
@@ -87,15 +93,17 @@ vercel deploy --prod
 vercel env pull .env.local
 ```
 
+This pulls the Development environment. If you connected only some environments, add `--environment production` (or `preview`).
+
 | Variable | What it is |
 | --- | --- |
 | `TELNYX_API_KEY` | A Telnyx API key that can only send and read messages. Server-side only, never expose it to the browser. |
 | `TELNYX_PHONE_NUMBER` | The number to send from, in E.164 (`+1...`). Only present after the identity check. |
-| `TELNYX_MESSAGING_PROFILE_ID` | The messaging profile the number belongs to. |
-| `TELNYX_MESSAGING_WEBHOOK_URL` | Where Telnyx sends incoming texts and delivery receipts. |
-| `TELNYX_PUBLIC_KEY` | Base64 Ed25519 public key for checking webhook signatures. |
+| `TELNYX_MESSAGING_PROFILE_ID` | The messaging profile the number belongs to. Arrives with the number. |
+| `TELNYX_MESSAGING_WEBHOOK_URL` | Where Telnyx sends incoming texts and delivery receipts. Present once the number is assigned and a webhook is set (your `webhook_url`, or a connected project). |
+| `TELNYX_PUBLIC_KEY` | Base64 Ed25519 public key for checking webhook signatures. Can arrive with the number rather than at install. |
 
-Don't rename these or commit `.env.local`.
+Before the identity check passes, expect only `TELNYX_API_KEY`, and maybe `TELNYX_PUBLIC_KEY`. Don't rename these or commit `.env.local`.
 
 ## 5. Send a text
 
@@ -110,7 +118,7 @@ curl -X POST https://api.telnyx.com/v2/messages \
 
 From Next.js, add a route handler. See [references/nextjs.md](references/nextjs.md) for the full `app/api/send/route.ts`, with and without the `telnyx` npm package. Rules:
 
-- Put your own auth in front of the send route. Anyone who can call it can spend the user's balance.
+- Put your own auth in front of the send route. Anyone who can call it can spend the user's balance. The samples check a `SEND_API_SECRET` bearer token as a placeholder and refuse everything while it is unset.
 - `to` must be a US number in E.164, like `+14155550123`.
 - A 200 response means Telnyx queued the message, not that it was delivered. Keep `data.id` to check later.
 
@@ -148,7 +156,7 @@ If the production deployment sits behind Vercel Deployment Protection, Telnyx ca
      -H "Authorization: Bearer $TELNYX_API_KEY"
    ```
    `data.to[0].status` moves through `queued`, `sending`, `sent` to `delivered`. `sending_failed` or `delivery_failed` come with a code in `data.errors`. The same status arrives as `message.finalized` on the webhook.
-4. **Balance**: `vercel integration balance telnyx`.
+4. **Balance**: `vercel integration balance telnyx`. When no auto-recharge threshold is set, the CLI can fail here with `TypeError: Cannot read properties of undefined` (seen on CLI 55 and 65). Then read the balance on the resource in Vercel, or in the Telnyx dashboard (`vercel integration open telnyx`).
 
 ## 8. 10DLC registration (to text US mobile phones)
 
@@ -166,23 +174,23 @@ You can't register for the user, and code changes don't speed it up. Most reject
 | What you see | Cause | Fix |
 | --- | --- | --- |
 | `TELNYX_*` variables missing in the app | Resource not connected, or the deployment predates them | `vercel integration resource connect <resource-name> --yes`, then `vercel deploy --prod`. Locally, `vercel env pull .env.local` again. |
-| `TELNYX_PHONE_NUMBER` missing, other variables present | Identity check not passed yet | User completes it via `vercel integration open telnyx`, then redeploy. |
+| Only `TELNYX_API_KEY` (and maybe `TELNYX_PUBLIC_KEY`) present | Identity check not passed yet | User completes it via `vercel integration open telnyx`, then redeploy. |
 | Send accepted, then `message.finalized` or the status check shows code **40010** (Not 10DLC registered) | Sending to a US mobile before the 10DLC campaign is approved | Expected until approval. See 10DLC above. |
 | Send refused with **40309** (Invalid destination region) or **40306** (Alpha sender not configured) | Destination is outside the US | Only US numbers can be texted. Validate `to` as `+1` and 10 digits before sending. |
 | HTTP **403** from the Telnyx API | The key only allows sending and reading messages. Numbers, profiles, billing and other endpoints are refused | Use the API only for `/v2/messages`. Manage everything else in the Telnyx dashboard or in Vercel. |
 | HTTP **401** from the Telnyx API | Wrong or missing `TELNYX_API_KEY`, or a key that was rotated more than 24 hours ago | Redeploy to pick up the current key. Rotating the key (dashboard, team admins) pushes the new key to connected projects. |
 | `/api/telnyx/inbound` answers 401 | `TELNYX_PUBLIC_KEY` missing from this deployment, body parsed before verifying, or the request isn't from Telnyx | Redeploy after connecting. Verify against the raw `req.text()` body. |
 | No inbound requests at all | Route not at `app/api/telnyx/inbound`, not deployed to production, production protected, or a custom `webhook_url` points elsewhere | Check `TELNYX_MESSAGING_WEBHOOK_URL` (after `vercel env pull`) and deploy the route to production. |
-| Install stops: the email already has a Telnyx account | The Vercel team email is already used by a Telnyx account | A known limitation. Use a team with a different email, or contact support@telnyx.com. |
+| Install stops: "There's already a Telnyx account for …" | The team email (a free email provider, so no plus-address) already has a Telnyx account | A known limitation. Linking an existing Telnyx account isn't supported yet. |
 | Sends stop working | Prepaid balance reached $0 | Add funds or set auto-recharge on the resource in Vercel. |
 | `connect` fails with a variable name conflict | The project already has a variable with the same name | Remove the old one with `vercel env rm`, or connect with `--prefix`, and update the code to match. |
 
 ## Limits
 
 - US local numbers only, sending to US numbers only. No voice, MMS, toll-free or short codes.
-- One prepaid balance per installation, shared by all its numbers. Refunds of unused credit go through support@telnyx.com.
+- One prepaid balance per installation, shared by all its numbers. Refunds of unused credit go through `support@telnyx.com`.
 - The API key can only send and read messages.
 - The inbound webhook is per installation, not per project. It points at the first project connected without a custom `webhook_url`.
 - Deleting the resource releases the number for good. Uninstalling closes the Telnyx account.
 
-Support: open Telnyx from the integration in Vercel, go to **Support**, select **Copy support details** and email support@telnyx.com. 10DLC questions: 10dlcquestions@telnyx.com.
+Support: open Telnyx from the integration in Vercel, go to **Support**, select **Copy support details** and email `support@telnyx.com`. 10DLC questions: `10dlcquestions@telnyx.com`.
