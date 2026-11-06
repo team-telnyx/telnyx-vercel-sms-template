@@ -8,10 +8,22 @@ App Router route handlers, Node.js runtime (the default). Both versions read the
 
 ```ts
 // app/api/send/route.ts
+import crypto from "node:crypto";
+
 const US_E164 = /^\+1[2-9]\d{2}[2-9]\d{6}$/;
 
+// Every text is paid from the prepaid balance, so nothing is sent without auth.
+// This placeholder wants `Authorization: Bearer <SEND_API_SECRET>` and refuses
+// everything while SEND_API_SECRET is unset. Swap in your app's own auth.
+function authorized(req: Request) {
+  const secret = process.env.SEND_API_SECRET;
+  const given = Buffer.from(req.headers.get("authorization") ?? "");
+  const want = Buffer.from(`Bearer ${secret}`);
+  return !!secret && given.length === want.length && crypto.timingSafeEqual(given, want);
+}
+
 export async function POST(req: Request) {
-  // Add your own auth check here first: every text is paid from the prepaid balance.
+  if (!authorized(req)) return new Response("unauthorized", { status: 401 });
   const { to, text } = (await req.json()) as { to?: string; text?: string };
   if (!to || !US_E164.test(to) || !text) {
     return Response.json({ error: "Send { to: '+1XXXXXXXXXX', text }. US numbers only." }, { status: 400 });
@@ -40,16 +52,28 @@ export async function POST(req: Request) {
 ```ts
 // app/api/send/route.ts
 import Telnyx from "telnyx";
+import crypto from "node:crypto";
 
 const US_E164 = /^\+1[2-9]\d{2}[2-9]\d{6}$/;
 
+// Every text is paid from the prepaid balance, so nothing is sent without auth.
+// This placeholder wants `Authorization: Bearer <SEND_API_SECRET>` and refuses
+// everything while SEND_API_SECRET is unset. Swap in your app's own auth.
+function authorized(req: Request) {
+  const secret = process.env.SEND_API_SECRET;
+  const given = Buffer.from(req.headers.get("authorization") ?? "");
+  const want = Buffer.from(`Bearer ${secret}`);
+  return !!secret && given.length === want.length && crypto.timingSafeEqual(given, want);
+}
+
 export async function POST(req: Request) {
-  // Add your own auth check here first: every text is paid from the prepaid balance.
+  if (!authorized(req)) return new Response("unauthorized", { status: 401 });
   const { to, text } = (await req.json()) as { to?: string; text?: string };
   if (!to || !US_E164.test(to) || !text) {
     return Response.json({ error: "Send { to: '+1XXXXXXXXXX', text }. US numbers only." }, { status: 400 });
   }
-  const telnyx = new Telnyx({ apiKey: process.env.TELNYX_API_KEY });
+  // maxRetries: 0, because the SDK retries timeouts and 5xx by default, and a retried send can deliver the text twice.
+  const telnyx = new Telnyx({ apiKey: process.env.TELNYX_API_KEY, maxRetries: 0 });
   try {
     const { data } = await telnyx.messages.send({ from: process.env.TELNYX_PHONE_NUMBER, to, text });
     return Response.json({ id: data?.id, status: data?.to?.[0]?.status });
