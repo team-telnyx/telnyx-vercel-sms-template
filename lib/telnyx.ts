@@ -1,10 +1,9 @@
 /**
- * Minimal Telnyx helpers for this template: send an SMS, and verify the
- * Ed25519 signature Telnyx puts on every webhook. No SDK needed.
+ * Telnyx helpers for this template, built on the official `telnyx` SDK:
+ * send an SMS, and verify the Ed25519 signature Telnyx puts on every webhook.
  */
 import crypto from "node:crypto";
-
-const API = "https://api.telnyx.com/v2";
+import Telnyx, { APIError } from "telnyx";
 
 /** US numbers in E.164: +1 then ten digits. Your messaging profile only allows US destinations. */
 export const US_E164 = /^\+1[2-9]\d{2}[2-9]\d{6}$/;
@@ -20,6 +19,15 @@ export class TelnyxError extends Error {
   }
 }
 
+/**
+ * A client per call, so it always picks up the current environment variables.
+ * No automatic retries: a retried send could deliver the same text twice, and
+ * the inbound webhook has to answer Telnyx within 2 seconds.
+ */
+function telnyxClient(apiKey: string | null = process.env.TELNYX_API_KEY ?? null) {
+  return new Telnyx({ apiKey, publicKey: process.env.TELNYX_PUBLIC_KEY?.trim() || null, maxRetries: 0 });
+}
+
 export async function sendSms(to: string, text: string) {
   const key = process.env.TELNYX_API_KEY;
   const from = process.env.TELNYX_PHONE_NUMBER;
@@ -29,57 +37,43 @@ export async function sendSms(to: string, text: string) {
       500,
     );
   }
-  const res = await fetch(`${API}/messages`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
+  try {
+    const res = await telnyxClient(key).messages.send({
       from,
       to,
       text,
       messaging_profile_id: process.env.TELNYX_MESSAGING_PROFILE_ID,
-    }),
-  });
-  const json = (await res.json().catch(() => ({}))) as {
-    data?: { id: string; to: { status: string }[] };
-    errors?: { code?: string; title?: string; detail?: string }[];
-  };
-  if (!res.ok || !json.data) {
-    const e = json.errors?.[0];
-    const what = e?.detail || e?.title || `HTTP ${res.status}`;
-    throw new TelnyxError(`Telnyx ${res.status}${e?.code ? ` (code ${e.code})` : ""}: ${what}`, res.status, e?.code);
+    });
+    if (!res.data) throw new TelnyxError("Telnyx 200: the response had no message data", 502);
+    return res.data;
+  } catch (err) {
+    if (err instanceof APIError && err.status) {
+      // The SDK keeps the response body on err.error: { errors: [{ code, title, detail }] }.
+      const body = err.error as { errors?: { code?: string; title?: string; detail?: string }[] } | undefined;
+      const e = body?.errors?.[0];
+      const what = e?.detail || e?.title || `HTTP ${err.status}`;
+      throw new TelnyxError(`Telnyx ${err.status}${e?.code ? ` (code ${e.code})` : ""}: ${what}`, err.status, e?.code);
+    }
+    throw err;
   }
-  return json.data;
 }
 
-// SubjectPublicKeyInfo header for a raw Ed25519 key (RFC 8410).
-const SPKI_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
-
 /**
- * Verify `telnyx-signature-ed25519` over `${telnyx-timestamp}|${rawBody}`.
- * Fails closed: no configured public key, no headers, a stale timestamp
- * (> 5 minutes) or a bad signature all return false.
+ * Verify `telnyx-signature-ed25519` over `${telnyx-timestamp}|${rawBody}` with
+ * the SDK's `webhooks.unwrap`. Fails closed: no configured public key, no
+ * headers, a stale timestamp (> 5 minutes) or a bad signature all return null.
+ * On success, returns the parsed event. A correctly signed body that isn't JSON
+ * throws a SyntaxError.
  */
-export function verifyTelnyxSignature(
-  rawBody: string,
-  signature: string | null,
-  timestamp: string | null,
-  publicKeyB64 = process.env.TELNYX_PUBLIC_KEY,
-): boolean {
-  if (!publicKeyB64 || !signature || !timestamp) return false;
-  if (!/^\d+$/.test(timestamp)) return false;
-  if (Math.abs(Date.now() / 1000 - Number(timestamp)) > 300) return false;
+export async function verifyTelnyxWebhook<T = unknown>(rawBody: string, headers: Headers): Promise<T | null> {
+  if (!process.env.TELNYX_PUBLIC_KEY?.trim()) return null;
   try {
-    const raw = Buffer.from(publicKeyB64, "base64");
-    const sig = Buffer.from(signature, "base64");
-    if (raw.length !== 32 || sig.length !== 64) return false;
-    const key = crypto.createPublicKey({
-      key: Buffer.concat([SPKI_PREFIX, raw]),
-      format: "der",
-      type: "spki",
-    });
-    return crypto.verify(null, Buffer.from(`${timestamp}|${rawBody}`), key, sig);
-  } catch {
-    return false;
+    const event = await telnyxClient().webhooks.unwrap(rawBody, { headers: Object.fromEntries(headers) });
+    return event as T;
+  } catch (err) {
+    // unwrap checks the signature first and only then parses the body.
+    if (err instanceof SyntaxError) throw err;
+    return null;
   }
 }
 
