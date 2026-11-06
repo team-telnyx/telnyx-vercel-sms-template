@@ -2,9 +2,9 @@
 
 A small Next.js app for a Telnyx phone number bought through the [Vercel Marketplace](https://vercel.com/marketplace/telnyx). It sends SMS from a password-protected form, receives incoming texts and delivery receipts on a signed webhook, and replies **PONG** to **PING**.
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fteam-telnyx%2Ftelnyx-vercel-sms-template&project-name=telnyx-sms&repository-name=telnyx-sms&stores=%5B%7B%22type%22%3A%22integration%22%2C%22integrationSlug%22%3A%22telnyx%22%2C%22productSlug%22%3A%22phone-number%22%7D%5D&env=SEND_FORM_PASSWORD&envDescription=Choose%20a%20password%20for%20the%20send%20form.%20It%20stops%20strangers%20from%20sending%20texts%20on%20your%20Telnyx%20balance.&envLink=https%3A%2F%2Fgithub.com%2Fteam-telnyx%2Ftelnyx-vercel-sms-template%23environment-variables)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fteam-telnyx%2Ftelnyx-vercel-sms-template&project-name=telnyx-vercel-sms-template&repository-name=telnyx-vercel-sms-template&products=%5B%7B%22type%22%3A%22integration%22%2C%22integrationSlug%22%3A%22telnyx%22%2C%22productSlug%22%3A%22phone-number%22%2C%22protocol%22%3A%22other%22%7D%5D)
 
-The button clones this repo, asks you to choose a `SEND_FORM_PASSWORD`, and adds the Telnyx *SMS Phone Number (US)* product to the new project.
+The button clones this repo and adds the Telnyx *SMS Phone Number (US)* product to the new project. After it deploys, set a `SEND_FORM_PASSWORD` in the project's environment variables to turn on the send form.
 
 The full setup guide, including costs, 10DLC registration, support and uninstalling, is at [telnyx-vercel-integration.vercel.app/docs](https://telnyx-vercel-integration.vercel.app/docs).
 
@@ -49,7 +49,7 @@ The agent can't accept the terms, pay or do the identity check for you. It will 
 
 ## Run it
 
-1. Select **Deploy**. Choose a password for the send form, add Telnyx on the *Pay as you go* plan, and add funds.
+1. Select **Deploy**. Add Telnyx on the *Pay as you go* plan and add funds. Then add a `SEND_FORM_PASSWORD` of your choice in **Settings** > **Environment Variables**. It protects the send form.
 2. Open **Telnyx** from the integration page in Vercel and complete the identity check. When it passes, Telnyx assigns your phone number and Vercel adds `TELNYX_PHONE_NUMBER` to the project.
 3. Redeploy the project from the **Deployments** tab so it picks up the new variables. The home page then shows your number.
 4. Text **PING** to your number from any phone. The message appears in your project's logs for `/api/telnyx/inbound`. Connecting the number to the project sets its inbound webhook to `https://<production-domain>/api/telnyx/inbound` automatically.
