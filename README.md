@@ -2,9 +2,9 @@
 
 A small Next.js app for a Telnyx phone number bought through the [Vercel Marketplace](https://vercel.com/marketplace/telnyx). It sends SMS from a password-protected form, receives incoming texts and delivery receipts on a signed webhook, and replies **PONG** to **PING**.
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fteam-telnyx%2Ftelnyx-vercel-sms-template&project-name=telnyx-vercel-sms-template&repository-name=telnyx-vercel-sms-template&products=%5B%7B%22type%22%3A%22integration%22%2C%22integrationSlug%22%3A%22telnyx%22%2C%22productSlug%22%3A%22phone-number%22%2C%22protocol%22%3A%22other%22%7D%5D)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fteam-telnyx%2Ftelnyx-vercel-sms-template&project-name=telnyx-vercel-sms-template&repository-name=telnyx-vercel-sms-template&products=%5B%7B%22type%22%3A%22integration%22%2C%22integrationSlug%22%3A%22telnyx%22%2C%22productSlug%22%3A%22phone-number%22%2C%22protocol%22%3A%22other%22%7D%5D&env=SEND_FORM_PASSWORD&envDescription=Choose%20a%20password%20for%20the%20send%20form.%20It%20stops%20strangers%20from%20sending%20texts%20on%20your%20Telnyx%20balance.&envLink=https%3A%2F%2Fgithub.com%2Fteam-telnyx%2Ftelnyx-vercel-sms-template%23environment-variables)
 
-The button clones this repo and adds the Telnyx *SMS Phone Number (US)* product to the new project. After it deploys, set a `SEND_FORM_PASSWORD` in the project's environment variables to turn on the send form.
+The button clones this repo, adds the Telnyx *SMS Phone Number (US)* product to the new project, and asks you for a `SEND_FORM_PASSWORD` that protects the send form.
 
 The full setup guide, including costs, 10DLC registration, support and uninstalling, is at [telnyx-vercel-integration.vercel.app/docs](https://telnyx-vercel-integration.vercel.app/docs).
 
@@ -49,7 +49,7 @@ The agent can't accept the terms, pay or do the identity check for you. It will 
 
 ## Run it
 
-1. Select **Deploy**. Add Telnyx on the *Pay as you go* plan and add funds. Then add a `SEND_FORM_PASSWORD` of your choice in **Settings** > **Environment Variables**. It protects the send form.
+1. Select **Deploy**. Add Telnyx on the *Pay as you go* plan and add funds, and choose a `SEND_FORM_PASSWORD` when asked. It protects the send form.
 2. Open **Telnyx** from the integration page in Vercel and complete the identity check. When it passes, Telnyx assigns your phone number and Vercel adds `TELNYX_PHONE_NUMBER` to the project.
 3. Redeploy the project from the **Deployments** tab so it picks up the new variables. The home page then shows your number.
 4. Text **PING** to your number from any phone. The message appears in your project's logs for `/api/telnyx/inbound`. Connecting the number to the project sets its inbound webhook to `https://<production-domain>/api/telnyx/inbound` automatically.
@@ -90,7 +90,7 @@ Variables added or changed after a deployment take effect on the next deployment
 
 ## The two routes
 
-- `app/api/send/route.ts` takes `POST { to, text, password }` and sends an SMS with `POST /v2/messages`. It refuses requests without the right `SEND_FORM_PASSWORD`, and refuses all requests while the password is unset. It only accepts US numbers in E.164 format, and it returns Telnyx's error detail when a send fails. Replace the password with your own authentication before you build on it.
+- `app/api/send/route.ts` takes `POST { to, text, password }` and sends an SMS with the `telnyx` SDK (`client.messages.send`). It refuses requests without the right `SEND_FORM_PASSWORD`, and refuses all requests while the password is unset. It only accepts US numbers in E.164 format, and it returns Telnyx's error detail when a send fails. Replace the password with your own authentication before you build on it.
 - `app/api/telnyx/inbound/route.ts` receives Telnyx events. It verifies the Ed25519 signature over `${telnyx-timestamp}|${body}` with a five-minute tolerance, and answers 401 when the key, headers or signature are wrong. It skips events it has already seen by `data.id`, because retries and the failover URL can deliver an event twice. The check is in memory, so it can miss a duplicate. The route logs incoming texts and delivery receipts and answers within 2 seconds. It waits for the PING reply to send before it returns, so Vercel doesn't stop the function early. Replace it with your own handling.
 
 ## Troubleshooting
