@@ -102,6 +102,7 @@ This pulls the Development environment. If you connected only some environments,
 | `TELNYX_MESSAGING_PROFILE_ID` | The messaging profile the number belongs to. Arrives with the number. |
 | `TELNYX_MESSAGING_WEBHOOK_URL` | Where Telnyx sends incoming texts and delivery receipts. Present once the number is assigned and a webhook is set (your `webhook_url`, or a connected project). |
 | `TELNYX_PUBLIC_KEY` | Base64 Ed25519 public key for checking webhook signatures. Can arrive with the number rather than at install. |
+| `TELNYX_DASHBOARD_URL` | When present: a link that opens the Telnyx dashboard through Vercel sign-in. Append `?to=messaging` (10DLC registration) or `?to=verify` (identity check). Fine to show in a page; it still needs Vercel sign-in. |
 
 Before the identity check passes, expect only `TELNYX_API_KEY`, and maybe `TELNYX_PUBLIC_KEY`. Don't rename these or commit `.env.local`.
 
@@ -119,6 +120,7 @@ curl -X POST https://api.telnyx.com/v2/messages \
 From Next.js, add a route handler. See [references/nextjs.md](references/nextjs.md) for the full `app/api/send/route.ts`, with and without the `telnyx` npm package. Rules:
 
 - Put your own auth in front of the send route. Anyone who can call it can spend the user's balance. The samples check a `SEND_API_SECRET` bearer token as a placeholder and refuse everything while it is unset.
+- For a public demo page, the template's pattern needs no password: only text a phone that texted you first. The page shows a one-time code, the visitor texts it, the inbound webhook links that phone to the browser's session, and the send route reads the recipient from the session, never from the request. Add per-phone and daily limits. See [references/nextjs.md](references/nextjs.md).
 - `to` must be a US number in E.164, like `+14155550123`.
 - A 200 response means Telnyx queued the message, not that it was delivered. Keep `data.id` to check later.
 
@@ -136,7 +138,8 @@ The handler must:
 2. Reject a bad or missing signature, or a timestamp more than 5 minutes off, with 401.
 3. Answer 2xx within 2 seconds. Otherwise Telnyx retries and then tries the failover URL.
 4. Skip events whose `data.id` it has already handled. Retries can deliver an event twice.
-5. `await` any reply it sends before returning. Vercel stops the function once the response is sent.
+5. `await` any reply it sends before returning. Vercel stops the function once the response is sent. Other work (writing to a store) can go in `after()` from `next/server`.
+6. Never reply to STOP, START or HELP (or STOPALL, UNSUBSCRIBE, CANCEL, END, QUIT, UNSTOP). Telnyx handles them on the messaging profile: it blocks or unblocks the sender, sends the confirmation itself, and sets `data.payload.autoresponse_type` on the inbound event. Later sends to a phone that sent STOP fail with **40300**.
 
 The full verified handler is in [references/nextjs.md](references/nextjs.md). The incoming text is `data.payload.text` and the sender is `data.payload.from.phone_number`.
 
@@ -144,7 +147,7 @@ If the production deployment sits behind Vercel Deployment Protection, Telnyx ca
 
 ## 7. Check that it works
 
-1. **Receive.** Ask the user to text the number from any phone, in any country. Then look for the request:
+1. **Receive.** Ask the user to text the number from any phone, in any country. With the template, the text shows up on the home page within a couple of seconds. Otherwise, or if it doesn't, look for the request:
    ```sh
    vercel logs --environment production --since 30m
    ```
@@ -175,7 +178,8 @@ You can't register for the user, and code changes don't speed it up. Most reject
 | --- | --- | --- |
 | `TELNYX_*` variables missing in the app | Resource not connected, or the deployment predates them | `vercel integration resource connect <resource-name> --yes`, then `vercel deploy --prod`. Locally, `vercel env pull .env.local` again. |
 | Only `TELNYX_API_KEY` (and maybe `TELNYX_PUBLIC_KEY`) present | Identity check not passed yet | User completes it via `vercel integration open telnyx`, then redeploy. |
-| Send accepted, then `message.finalized` or the status check shows code **40010** (Not 10DLC registered) | Sending to a US mobile before the 10DLC campaign is approved | Expected until approval. See 10DLC above. |
+| Send accepted, then `message.finalized` or the status check shows code **40010** (Not 10DLC registered), **47000**, or **40300** with registration wording | Sending to a US mobile before the 10DLC campaign is approved. Telnyx documents this failure under more than one code, so match the code and the error text | Expected until approval. See 10DLC above. |
+| Send refused with **40300** "Blocked due to STOP message" | The phone texted STOP to the number | Don't retry. The phone opts back in by texting START. |
 | Send refused with **40309** (Invalid destination region) or **40306** (Alpha sender not configured) | Destination is outside the US | Only US numbers can be texted. Validate `to` as `+1` and 10 digits before sending. |
 | HTTP **403** from the Telnyx API | The key only allows sending and reading messages. Numbers, profiles, billing and other endpoints are refused | Use the API only for `/v2/messages`. Manage everything else in the Telnyx dashboard or in Vercel. |
 | HTTP **401** from the Telnyx API | Wrong or missing `TELNYX_API_KEY`, or a key that was rotated more than 24 hours ago | Redeploy to pick up the current key. Rotating the key (dashboard, team admins) pushes the new key to connected projects. |
@@ -184,6 +188,13 @@ You can't register for the user, and code changes don't speed it up. Most reject
 | Install stops: "There's already a Telnyx account for …" | The team email (a free email provider, so no plus-address) already has a Telnyx account | A known limitation. Linking an existing Telnyx account isn't supported yet. |
 | Sends stop working | Prepaid balance reached $0 | Add funds or set auto-recharge on the resource in Vercel. |
 | `connect` fails with a variable name conflict | The project already has a variable with the same name | Remove the old one with `vercel env rm`, or connect with `--prefix`, and update the code to match. |
+
+## Gotchas for live demo pages
+
+- Vercel Runtime Cache (`getCache` from `@vercel/functions`) is a zero-setup place for a short-lived message feed, but it is per environment and per region. A preview deployment never sees the production webhook's messages, and a Pro project in several regions can split the feed.
+- On Hobby, every project in the team shares one Runtime Cache and its monthly read and write allowance. When that runs out, the cache pauses until the next period. Poll gently (pause hidden tabs, slow down, stop after a while) and namespace keys.
+- The cache's default key hash is 32-bit, and an entry's name defaults to the raw key, which shows in Observability. Hash keys yourself (SHA-256) and pass a `name` without phone numbers.
+- `after()` throws outside a Next.js request, so unit tests must mock `next/server`.
 
 ## Limits
 

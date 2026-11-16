@@ -3,6 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { POST as inbound } from "@/app/api/telnyx/inbound/route";
 import { POST as send } from "@/app/api/send/route";
 import { sendSms, TelnyxError, verifyTelnyxWebhook } from "@/lib/telnyx";
+import { setCacheForTests } from "@/lib/store";
+import { memoryCache } from "./helpers";
+
+// after() only works inside a Next.js request; the helper queues the callbacks instead.
+vi.mock("next/server", () => import("./helpers"));
 
 // No test talks to Telnyx: the SDK's HTTP calls go to this fake fetch.
 const fetchMock = vi.fn();
@@ -23,6 +28,7 @@ function telnyxReply(status: number, body: unknown) {
 const sent = { data: { id: "msg-1", to: [{ phone_number: "+14155550123", status: "queued" }] } };
 
 beforeEach(() => {
+  setCacheForTests(memoryCache().cache);
   vi.stubGlobal("fetch", fetchMock);
   vi.stubEnv("TELNYX_API_KEY", "KEY_TEST");
   vi.stubEnv("TELNYX_PHONE_NUMBER", "+13125550100");

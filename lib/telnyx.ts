@@ -14,6 +14,8 @@ export class TelnyxError extends Error {
     message: string,
     public readonly status: number,
     public readonly code?: string,
+    public readonly title?: string,
+    public readonly detail?: string,
   ) {
     super(message);
   }
@@ -47,15 +49,43 @@ export async function sendSms(to: string, text: string) {
     if (!res.data) throw new TelnyxError("Telnyx 200: the response had no message data", 502);
     return res.data;
   } catch (err) {
-    if (err instanceof APIError && err.status) {
-      // The SDK keeps the response body on err.error: { errors: [{ code, title, detail }] }.
-      const body = err.error as { errors?: { code?: string; title?: string; detail?: string }[] } | undefined;
-      const e = body?.errors?.[0];
-      const what = e?.detail || e?.title || `HTTP ${err.status}`;
-      throw new TelnyxError(`Telnyx ${err.status}${e?.code ? ` (code ${e.code})` : ""}: ${what}`, err.status, e?.code);
-    }
-    throw err;
+    throw toTelnyxError(err);
   }
+}
+
+/**
+ * Look up a message's current status (`GET /v2/messages/{id}`). The page uses
+ * it when a delivery receipt is late.
+ */
+export async function getMessageStatus(id: string) {
+  const key = process.env.TELNYX_API_KEY;
+  if (!key) throw new TelnyxError("TELNYX_API_KEY isn't set.", 500);
+  try {
+    const res = await telnyxClient(key).messages.retrieve(id);
+    const data = res.data as
+      | { to?: { status?: string }[]; errors?: { code?: string; title?: string; detail?: string }[] }
+      | undefined;
+    return { status: data?.to?.[0]?.status, errors: data?.errors };
+  } catch (err) {
+    throw toTelnyxError(err);
+  }
+}
+
+function toTelnyxError(err: unknown): unknown {
+  if (err instanceof APIError && err.status) {
+    // The SDK keeps the response body on err.error: { errors: [{ code, title, detail }] }.
+    const body = err.error as { errors?: { code?: string; title?: string; detail?: string }[] } | undefined;
+    const e = body?.errors?.[0];
+    const what = e?.detail || e?.title || `HTTP ${err.status}`;
+    return new TelnyxError(
+      `Telnyx ${err.status}${e?.code ? ` (code ${e.code})` : ""}: ${what}`,
+      err.status,
+      e?.code,
+      e?.title,
+      e?.detail,
+    );
+  }
+  return err;
 }
 
 /**

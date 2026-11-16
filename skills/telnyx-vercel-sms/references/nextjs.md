@@ -159,9 +159,52 @@ export async function POST(req: Request) {
 }
 ```
 
+## A live feed and paired sending (the template's pattern)
+
+The template keeps a short-lived feed in Vercel Runtime Cache, so the home page can show texts as they arrive without a database. The same shape works with any store.
+
+```ts
+// lib/store.ts (excerpt)
+import crypto from "node:crypto";
+import { getCache } from "@vercel/functions";
+
+const sha = (s: string) => crypto.createHash("sha256").update(s).digest("hex").slice(0, 40);
+// Digits-only namespace (it isn't hashed) and SHA-256 keys (no numbers, no collisions).
+const key = (k: string) => `tsms${(process.env.TELNYX_PHONE_NUMBER ?? "").replace(/\D/g, "")}$${sha(k)}`;
+const cache = () => getCache({ keyHashFunction: (k) => k });
+
+export async function pushFeed(item: { id: string; text: string; at: number }) {
+  const prev = ((await cache().get(key("feed"))) as { items: unknown[] } | null) ?? { items: [] };
+  // `name` is what Observability shows: never the raw key, which may contain a number.
+  await cache().set(key("feed"), { ver: Date.now(), items: [item, ...prev.items].slice(0, 20) }, { ttl: 86_400, name: "feed" });
+}
+```
+
+In the inbound route, await only the reply and do the rest after the response:
+
+```ts
+import { after } from "next/server";
+
+const auto = data.payload.autoresponse_type; // "STOP" | "START" | "HELP" when Telnyx handled a keyword
+if (auto) {
+  // Telnyx already replied and blocked or unblocked the sender. Send nothing.
+} else if (/^\s*PING\b/i.test(data.payload.text ?? "")) {
+  await sendSms(from, "PONG"); // awaited: the reply must not be lost
+}
+after(() => pushFeed({ id: data.id, text: data.payload.text, at: Date.now() }));
+```
+
+Paired sending, with no password: the page asks the server for a one-time code (with `POST`, so link previews don't create codes) and shows "Text PING 4F7K". When the webhook sees a live code, it stores `session -> sender number` and deletes the code. The send route then texts `session.number` and ignores any `to` in the request, so a visitor can only text their own phone. Add per-phone and daily limits.
+
+For unit tests, mock `after()`, which throws outside a Next.js request:
+
+```ts
+vi.mock("next/server", () => ({ after: (fn: () => unknown) => void Promise.resolve().then(fn) }));
+```
+
 ## Event shapes you'll use
 
-- `message.received`: `data.id` (event id, use it to dedupe), `data.payload.from.phone_number`, `data.payload.to[0].phone_number` (your number), `data.payload.text`.
+- `message.received`: `data.id` (event id, use it to dedupe), `data.payload.from.phone_number`, `data.payload.to[0].phone_number` (your number), `data.payload.text`, and `data.payload.autoresponse_type` when Telnyx handled STOP, START or HELP.
 - `message.sent`, `message.finalized`: `data.payload.id` (the message id from the send response), `data.payload.to[0].status` (`sent`, `delivered`, `sending_failed`, `delivery_failed`, `delivery_unconfirmed`) and `data.payload.errors` (code and title, for example 40010).
 
 ## Testing locally
