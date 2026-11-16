@@ -10,6 +10,7 @@ import {
   setStatus,
   wasRetrieved,
   type FeedItem,
+  type StoredStatus,
 } from "@/lib/store";
 import { getMessageStatus } from "@/lib/telnyx";
 
@@ -57,12 +58,14 @@ export async function GET(req: Request) {
 
   const now = Date.now();
   const pending = (i: FeedItem) => i.dir === "out" && now - i.at < PENDING_WINDOW_MS;
-  const statuses = new Map<string, Classified | null>();
+  const statuses = new Map<string, StoredStatus | null>();
   await Promise.all(
     feed.items.filter(pending).map(async (i) => statuses.set(i.id, await getStatus(i.id))),
   );
   const stillPending = [...statuses.values()].some((s) => !isFinal(s?.key));
-  if (since === feed.ver && !stillPending) return json({ ver: feed.ver, unchanged: true, paired });
+  // Receipts don't touch the feed itself, so the version also covers the newest receipt.
+  const ver = Math.max(feed.ver, ...[...statuses.values()].map((s) => s?.at ?? 0));
+  if (since === ver && !stillPending) return json({ ver, unchanged: true, paired });
   await Promise.all(
     feed.items
       .filter((i) => i.dir === "out" && !statuses.has(i.id))
@@ -82,7 +85,7 @@ export async function GET(req: Request) {
       const r = await getMessageStatus(i.id);
       const next = classify(r);
       await setStatus(i.id, next);
-      if (!s || next.rank >= s.rank) statuses.set(i.id, next);
+      if (!s || next.rank >= s.rank) statuses.set(i.id, { ...next, at: Date.now() });
     } catch {
       // Keep what we have; the webhook may still arrive.
     }
@@ -99,7 +102,7 @@ export async function GET(req: Request) {
       ...(s ? { status: { key: s.key, stage: s.stage, code: s.code, title: s.title } } : {}),
     };
   });
-  return json({ ver: feed.ver, items, paired, region: process.env.VERCEL_REGION });
+  return json({ ver, items, paired, region: process.env.VERCEL_REGION });
 }
 
 function json(body: FeedResponse) {

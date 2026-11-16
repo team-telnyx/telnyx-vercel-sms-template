@@ -205,6 +205,19 @@ describe("POST /api/send (paired mode)", () => {
     expect(f.items?.[0]).toMatchObject({ id: "m-out", dir: "out", text: "Hello", status: { key: "accepted" } });
   });
 
+  it("reports a receipt that arrives after the page last polled", async () => {
+    const cookie = await paired();
+    fetchMock.mockResolvedValueOnce(telnyxReply(200, queued("m-out")));
+    await sendAs(cookie, { text: "Hello" });
+    const before = await feed(cookie);
+    await new Promise((r) => setTimeout(r, 5));
+    await hook(receipt("message.sent", "m-out", "sent"));
+    await hook(receipt("message.finalized", "m-out", "delivery_failed", [{ code: "40010" }]));
+    // The feed itself didn't change, but the receipt did: the page must not get "unchanged".
+    const f = await feed(cookie, before.ver!);
+    expect(f.items?.[0].status).toMatchObject({ key: "unregistered", stage: 3 });
+  });
+
   it("refuses a paired phone outside the US", async () => {
     const cookie = await paired("+447700900123");
     const res = await sendAs(cookie, { text: "hi" });
