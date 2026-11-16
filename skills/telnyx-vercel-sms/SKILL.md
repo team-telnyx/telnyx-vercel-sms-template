@@ -7,7 +7,7 @@ description: Add a Telnyx US SMS phone number to a Vercel project through the Ve
 
 The Telnyx integration on the Vercel Marketplace (slug `telnyx`, product `telnyx/phone-number`, shown as *SMS Phone Number (US)*) gives a Vercel project a US phone number that can send and receive SMS. Installing it creates a Telnyx account for the Vercel team. Billing is prepaid credit bought in Vercel.
 
-Full guide for humans: https://telnyx-vercel-integration.vercel.app/docs
+Full guide for humans: https://vercel.telnyx.com/docs
 Working example app: https://github.com/team-telnyx/telnyx-vercel-sms-template
 
 ## Know this before you start

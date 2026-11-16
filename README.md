@@ -6,7 +6,7 @@ A small Next.js app for a Telnyx phone number bought through the [Vercel Marketp
 
 The button clones this repo and adds the Telnyx *SMS Phone Number (US)* product to the new project. There's nothing else to fill in.
 
-The full setup guide, including costs, 10DLC registration, support and uninstalling, is at [telnyx-vercel-integration.vercel.app/docs](https://telnyx-vercel-integration.vercel.app/docs).
+The full setup guide, including costs, 10DLC registration, support and uninstalling, is at [vercel.telnyx.com/docs](https://vercel.telnyx.com/docs).
 
 ## Set it up with a coding agent
 
@@ -46,7 +46,7 @@ The agent can't accept the terms, pay or do the identity check for you. It will 
 - **US only.** Numbers are US local numbers, and they can only send to US numbers.
 - **Prepaid balance.** You add funds in Vercel, starting at $10. Your prepaid balance pays for the number ($1.00 to activate, then $1.10 a month including SMS, with the first month prorated), for messages, and for US messaging registration fees, all at public Telnyx rates. For a refund, contact Telnyx support.
 - **Identity check.** Telnyx creates an account for your Vercel team. Before Telnyx assigns a phone number, a Vercel team admin completes a one-time identity check with a government photo ID and a selfie. Onfido runs the check for Telnyx. Most checks finish within a few minutes, and some take up to 24 hours.
-- **US messaging registration.** Texts to US mobile phones need a registered brand and campaign (10DLC). Receiving texts works straight away. See [Costs and timing](https://telnyx-vercel-integration.vercel.app/docs).
+- **US messaging registration.** Texts to US mobile phones need a registered brand and campaign (10DLC). Receiving texts works straight away. See [Costs and timing](https://vercel.telnyx.com/docs).
 
 ## Run it
 
