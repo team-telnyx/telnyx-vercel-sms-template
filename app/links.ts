@@ -1,7 +1,7 @@
 /** Where the page's buttons go. */
 import { withTarget } from "@/lib/format";
 
-export const DOCS_URL = "https://telnyx-vercel-integration.vercel.app/docs";
+export const DOCS_URL = "https://vercel.telnyx.com/docs";
 export const REPO_URL = "https://github.com/team-telnyx/telnyx-vercel-sms-template";
 export const SUPPORT_URL = "mailto:support@telnyx.com";
 export const MARKETPLACE_URL = "https://vercel.com/marketplace/telnyx";
