@@ -44,7 +44,7 @@ The agent can't accept the terms, pay or do the identity check for you. It will 
 ## Before you start
 
 - **US only.** Numbers are US local numbers, and they can only send to US numbers.
-- **Prepaid balance.** You add funds in Vercel, starting at $10. Your prepaid balance pays for the number at $1 a month, for messages, and for US messaging registration fees, all at public Telnyx rates. For a refund, contact Telnyx support.
+- **Prepaid balance.** You add funds in Vercel, starting at $10. Your prepaid balance pays for the number ($1.00 to activate, then $1.10 a month including SMS, with the first month prorated), for messages, and for US messaging registration fees, all at public Telnyx rates. For a refund, contact Telnyx support.
 - **Identity check.** Telnyx creates an account for your Vercel team. Before Telnyx assigns a phone number, a Vercel team admin completes a one-time identity check with a government photo ID and a selfie. Onfido runs the check for Telnyx. Most checks finish within a few minutes, and some take up to 24 hours. To start it, open **Telnyx** from the integration page in Vercel.
 - **US messaging registration.** Texts to US mobile phones need a registered brand and campaign. See [What works before registration](#what-works-before-registration).
 
@@ -80,14 +80,14 @@ US carriers only deliver texts from registered business numbers. This registrati
 
 | Variable | Set by | Used for |
 | --- | --- | --- |
-| `TELNYX_API_KEY` | The integration | A Telnyx key for this number that can only send and read messages. Keep it on the server. |
+| `TELNYX_API_KEY` | The integration, as soon as you add the number | A Telnyx key for this number that can only send and read messages. Keep it on the server. |
 | `TELNYX_PHONE_NUMBER` | The integration, after the identity check | The number you send from, in E.164 format |
-| `TELNYX_MESSAGING_PROFILE_ID` | The integration | The messaging profile the number belongs to |
-| `TELNYX_MESSAGING_WEBHOOK_URL` | The integration | Where incoming texts and delivery receipts go, the `/api/telnyx/inbound` route of the connected project |
-| `TELNYX_PUBLIC_KEY` | The integration | The Ed25519 key that verifies webhook signatures |
+| `TELNYX_MESSAGING_PROFILE_ID` | The integration, after the identity check | The messaging profile the number belongs to |
+| `TELNYX_MESSAGING_WEBHOOK_URL` | The integration, after the identity check, once the number is connected to a project or you set an inbound webhook URL on it | Where incoming texts and delivery receipts go. When you connect a project, it's that project's `/api/telnyx/inbound` route. |
+| `TELNYX_PUBLIC_KEY` | The integration, after the identity check (it can take up to an hour after the number arrives) | The Ed25519 key that verifies webhook signatures |
 | `SEND_FORM_PASSWORD` | You | Protects `/api/send`. Sending is off until you set it. |
 
-Variables added or changed after a deployment take effect on the next deployment.
+Before the identity check passes, only `TELNYX_API_KEY` is set. Variables added or changed after a deployment take effect on the next deployment.
 
 ## The two routes
 
