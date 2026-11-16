@@ -71,7 +71,7 @@ export function TravelDiagram() {
             <i className="key key-in" /> Texts in work now
           </span>
           <span>
-            <i className="key key-out" /> Texts out to US phones are held at the carrier until you register
+            <i className="key key-out" /> Texts out to US phones wait until you register
           </span>
         </figcaption>
       </figure>

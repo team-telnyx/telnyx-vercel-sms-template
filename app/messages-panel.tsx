@@ -106,7 +106,7 @@ export function MessagesPanel(props: {
           Live messages aren&apos;t available right now. Check your function logs.
         </p>
       ) : null}
-      <p className="footnote">Texts show in full only on the page linked to that phone. Others see a masked number. Messages clear after 24 hours.</p>
+      <p className="footnote">Only the page linked to a phone sees its texts. Numbers are masked, and messages clear after 24 hours.</p>
     </section>
   );
 }
