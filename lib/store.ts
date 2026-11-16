@@ -22,7 +22,7 @@ import { shouldReplace } from "./status";
 import { DAY_S, FEED_MAX, MAX_TEXT, OPT_OUT_TTL_S, PAIR_TTL_S } from "./limits";
 import { newCode } from "./pairing";
 
-export type FeedKind = "pong" | "stop" | "start" | "help";
+export type FeedKind = "pong" | "stop" | "start" | "help" | "nonus";
 
 export type FeedItem = {
   /** Telnyx message id for texts this app sent, the webhook event id for texts it received. */

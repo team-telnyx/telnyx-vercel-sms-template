@@ -53,7 +53,7 @@ The agent can't accept the terms, pay or do the identity check for you. It will 
 1. Select **Deploy**. Add Telnyx on the *Pay as you go* plan and add funds.
 2. Open the deployed site and select **Open Telnyx** to complete the identity check. When it passes, Vercel adds your number to the project.
 3. Redeploy the project from the **Deployments** tab so it picks up the new variables.
-4. Scan the QR code or tap **Open Messages**, and send the text. It appears on the page, and the app replies PONG.
+4. Scan the QR code or tap **Open Messages**, and send the text. It appears on the page, and the app replies PONG (to US phones only; texts from other countries still pair and show up).
 
 To text US mobile phones, select **Register for US messaging** on the page. Until your campaign is approved, the page shows replies as held by the carrier.
 

@@ -9,6 +9,7 @@ export type PollState = "live" | "paused" | "connecting";
 function systemLine(i: PublicItem): string | null {
   if (i.kind === "stop") return `${i.last4} opted out. This app won't text it again until it sends START.`;
   if (i.kind === "start") return `${i.last4} opted back in.`;
+  if (i.kind === "nonus") return `No PONG for ${i.last4}: this app replies to US numbers only. Pairing still works.`;
   if (i.kind === "help") return `${i.last4} asked for help. Telnyx sent your help reply.`;
   return null;
 }
