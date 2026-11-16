@@ -310,6 +310,24 @@ describe("GET /api/feed", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it("asks Telnyx again a minute later when the first lookup wasn't final", async () => {
+    vi.stubEnv("RECEIPT_GRACE_MS", "0");
+    const cookie = await paired();
+    fetchMock.mockResolvedValueOnce(telnyxReply(200, { data: { id: "pong-1", to: [{ status: "sending" }] } }));
+    expect((await feed(cookie)).items?.[0].status).toMatchObject({ key: "sending" });
+    await feed(cookie);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(Date.now() + 61_000);
+    fetchMock.mockResolvedValueOnce(telnyxReply(200, { data: { id: "pong-1", to: [{ status: "delivered" }] } }));
+    try {
+      expect((await feed(cookie)).items?.[0].status).toMatchObject({ key: "delivered" });
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("on a preview deployment, points to production and reads nothing", async () => {
     vi.stubEnv("VERCEL_ENV", "preview");
     vi.stubEnv("VERCEL_PROJECT_PRODUCTION_URL", "my-app.vercel.app");

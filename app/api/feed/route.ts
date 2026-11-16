@@ -72,7 +72,7 @@ export async function GET(req: Request) {
       .map(async (i) => statuses.set(i.id, await getStatus(i.id))),
   );
 
-  // Late receipt: ask Telnyx once per message, a couple of messages per request.
+  // Late receipt: ask Telnyx at most once a minute per message, a couple of messages per request.
   let lookups = 0;
   for (const i of feed.items) {
     if (lookups >= MAX_LOOKUPS) break;

@@ -131,9 +131,14 @@ export async function setStatus(messageId: string, status: Classified): Promise<
   await set(`msg:${messageId}`, { ...status, at: Date.now() } satisfies StoredStatus, DAY_S);
 }
 
-/** The status fallback (asking Telnyx directly) runs at most once per message. */
+/**
+ * The status fallback (asking Telnyx directly) runs at most once a minute per
+ * message. Not once ever: an early lookup can still say "queued" or "sent",
+ * and the message would then never show its final status.
+ */
+export const RETRIEVE_EVERY_S = 60;
 export const wasRetrieved = async (messageId: string) => (await get(`ret:${messageId}`)) !== null;
-export const markRetrieved = (messageId: string) => set(`ret:${messageId}`, 1, DAY_S);
+export const markRetrieved = (messageId: string) => set(`ret:${messageId}`, 1, RETRIEVE_EVERY_S);
 
 // Pairing -----------------------------------------------------------------
 
