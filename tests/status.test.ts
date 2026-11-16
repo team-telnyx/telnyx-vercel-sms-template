@@ -44,6 +44,10 @@ describe("classify", () => {
     expect(STATUS_COPY.failed(c)).toBe("Not delivered: Blocked as spam (code 40002).");
   });
 
+  it("explains 40306 (non-US destination) as US-only", () => {
+    expect(classify({ syncError: { code: "40306" } }).title).toBe("Telnyx only texts US numbers from this integration.");
+  });
+
   it("explains 40309 (destination not allowed)", () => {
     expect(classify({ syncError: { code: "40309" } }).title).toBe("Telnyx only texts US numbers from this integration.");
   });

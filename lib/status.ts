@@ -50,7 +50,8 @@ export const isFinal = (key: StatusKey | undefined) => key !== undefined && RANK
 const UNREGISTERED_CODES = new Set(["40010", "47000"]);
 const UNREGISTERED_TEXT = /10\s?DLC|not registered|unregistered|campaign required/i;
 const OPTED_OUT_TEXT = /\bSTOP\b|block rule|opted? out|unsubscribed/i;
-const US_ONLY_CODE = "40309";
+/** 40309: destination not allowed; 40306: non-US destination needs an alphanumeric sender. */
+const US_ONLY_CODES = new Set(["40309", "40306"]);
 
 function failure(errors: TelnyxErrorLike[] | undefined, stage: Stage): Classified {
   const first = errors?.find(Boolean);
@@ -63,7 +64,7 @@ function failure(errors: TelnyxErrorLike[] | undefined, stage: Stage): Classifie
     return { ...base, key: "unregistered" };
   }
   if (OPTED_OUT_TEXT.test(words)) return { ...base, key: "optedout" };
-  if (code === US_ONLY_CODE) return { ...base, key: "failed", title: "Telnyx only texts US numbers from this integration." };
+  if (code && US_ONLY_CODES.has(code)) return { ...base, key: "failed", title: "Telnyx only texts US numbers from this integration." };
   return { ...base, key: "failed" };
 }
 

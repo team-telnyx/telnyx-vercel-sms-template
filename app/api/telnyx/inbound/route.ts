@@ -12,7 +12,7 @@ import {
   setStatus,
   type FeedItem,
 } from "@/lib/store";
-import { sendSms, TelnyxError, verifyTelnyxWebhook } from "@/lib/telnyx";
+import { sendSms, TelnyxError, US_E164, verifyTelnyxWebhook } from "@/lib/telnyx";
 
 /**
  * Inbound SMS + delivery receipts from Telnyx.
@@ -104,7 +104,11 @@ export async function POST(req: Request) {
   // destinations only). Before your 10DLC campaign is approved, US carriers
   // block the reply to ordinary US mobiles; it still reaches Telnyx numbers.
   let pong: { id: string; status: ReturnType<typeof classify> } | null = null;
-  if (kind === "ping") {
+  if (kind === "ping" && !US_E164.test(from)) {
+    // A non-US phone: the messaging profile only texts US numbers, so don't
+    // try (Telnyx would refuse it). Say so in the feed instead.
+    items.unshift({ id: `${id}:nonus`, dir: "in", last4: shown, nh, text: "", at: now, kind: "nonus" });
+  } else if (kind === "ping") {
     // Await the reply: Vercel stops the function soon after the response is
     // sent, and the reply is the part that must not be lost.
     try {

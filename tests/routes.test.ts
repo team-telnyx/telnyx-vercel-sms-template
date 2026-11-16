@@ -106,6 +106,19 @@ describe("pairing through the inbound webhook", () => {
     ]);
   });
 
+  it("PING from a non-US phone: pairs, sends no PONG, and says why", async () => {
+    const s = await newSession();
+    await hook(received(`PING ${s.json.code}`, { from: "+353857688030" }));
+    expect(fetchMock).not.toHaveBeenCalled();
+    await flushAfter();
+    const f = await feed(s.cookie);
+    expect(f.paired).toEqual({ last4: "•••8030" });
+    expect(f.items?.map((i) => [i.dir, i.kind])).toEqual([
+      ["in", "nonus"],
+      ["in", undefined],
+    ]);
+  });
+
   it("a code without PING pairs without a reply", async () => {
     const s = await newSession();
     await hook(received(s.json.code!));
