@@ -84,8 +84,8 @@ Everything that touches the cache is in `lib/store.ts`. Swap it for a database, 
 | --- | --- | --- |
 | `TELNYX_API_KEY` | The integration, as soon as you add the number | A Telnyx key for this number that can only send and read messages. Keep it on the server. |
 | `TELNYX_PHONE_NUMBER` | The integration, after the identity check | The number you send from, in E.164 format |
-| `TELNYX_MESSAGING_PROFILE_ID` | The integration, after the identity check | The messaging profile the number belongs to |
-| `TELNYX_MESSAGING_WEBHOOK_URL` | The integration, after the identity check, once the number is connected to a project or you set an inbound webhook URL on it | Where incoming texts and delivery receipts go. When you connect a project, it's that project's `/api/telnyx/inbound` route. |
+| `TELNYX_MESSAGING_PROFILE_ID` | The integration, after the identity check | This number's messaging profile. Each number has its own. |
+| `TELNYX_MESSAGING_WEBHOOK_URL` | The integration, after the identity check, once the number is connected to a project with Production or you set an inbound webhook URL on it | Where this number's incoming texts and delivery receipts go. When you connect a project with Production, it's that project's `/api/telnyx/inbound` route. If more than one production project uses the number, texts go to one of them, and you choose which in Telnyx. |
 | `TELNYX_PUBLIC_KEY` | The integration, after the identity check (it can take up to an hour after the number arrives) | The Ed25519 key that verifies webhook signatures |
 | `TELNYX_DASHBOARD_URL` | The integration | Opens your Telnyx dashboard through Vercel sign-in, for the **Open Telnyx** and **Register for US messaging** buttons. Without it, they open the Telnyx integration page in Vercel. |
 | `SEND_FORM_PASSWORD` | You, optional | Turns on **Send to any US number** on the home page |
@@ -105,6 +105,7 @@ Before the identity check passes, only `TELNYX_API_KEY` is set. Variables added 
 - **The home page says "Add Telnyx to this project".** The project has no `TELNYX_*` variables. Connect the Telnyx phone number to the project in Vercel, then redeploy.
 - **The home page says "Verify your identity to get your number".** The identity check hasn't passed yet. Redeploy once the number is assigned.
 - **The page doesn't update when you text.** Check that you're on the production domain: preview deployments don't receive texts. Redeploy if the deployment is older than connecting the number. On Pro with several function regions, the webhook and the page can land in different regions. On Hobby, the Runtime Cache pauses when the team's monthly allowance runs out. Your function logs for `/api/telnyx/inbound` show every text either way.
+- **Texts to this number go to a different project.** Each number sends its texts to one place. Open the number in Telnyx (from the integration in Vercel) to see where they go, and pick another connected project or enter a URL there.
 - **The inbound route answers 401.** Either `TELNYX_PUBLIC_KEY` is missing from this deployment, or the request didn't come from Telnyx. Redeploy after you connect the number.
 - **A text to a US mobile phone is "held by the carrier".** This is expected until your campaign is approved. Select **Register for US messaging**.
 - **Your phone isn't a US number.** You can text the page from any country, but it can only text US numbers back.
