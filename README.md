@@ -84,7 +84,7 @@ Everything that touches the cache is in `lib/store.ts`. Swap it for a database, 
 | --- | --- | --- |
 | `TELNYX_API_KEY` | The integration, as soon as you add the number | A Telnyx key for this number that can only send and read messages. Keep it on the server. |
 | `TELNYX_PHONE_NUMBER` | The integration, after the identity check | The number you send from, in E.164 format |
-| `TELNYX_MESSAGING_PROFILE_ID` | The integration, after the identity check | This number's messaging profile. Each number has its own. |
+| `TELNYX_MESSAGING_PROFILE_ID` | The integration, after the identity check | Optional. You don't need it to send: Telnyx picks the profile from the `from` number. |
 | `TELNYX_MESSAGING_WEBHOOK_URL` | The integration, after the identity check, once the number is connected to a project with Production or you set an inbound webhook URL on it | Where this number's incoming texts and delivery receipts go. When you connect a project with Production, it's that project's `/api/telnyx/inbound` route. If more than one production project uses the number, texts go to one of them, and you choose which in Telnyx. |
 | `TELNYX_PUBLIC_KEY` | The integration, after the identity check (it can take up to an hour after the number arrives) | The Ed25519 key that verifies webhook signatures |
 | `TELNYX_DASHBOARD_URL` | The integration | Opens your Telnyx dashboard through Vercel sign-in, for the **Open Telnyx** and **Register for US messaging** buttons. Without it, they open the Telnyx integration page in Vercel. |

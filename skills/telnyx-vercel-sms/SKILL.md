@@ -99,7 +99,7 @@ This pulls the Development environment. If you connected only some environments,
 | --- | --- |
 | `TELNYX_API_KEY` | A Telnyx API key that can only send and read messages. Server-side only, never expose it to the browser. |
 | `TELNYX_PHONE_NUMBER` | The number to send from, in E.164 (`+1...`). Only present after the identity check. |
-| `TELNYX_MESSAGING_PROFILE_ID` | The messaging profile the number belongs to. Arrives with the number. |
+| `TELNYX_MESSAGING_PROFILE_ID` | Optional. The messaging profile the number belongs to. Not needed to send: Telnyx picks it from the `from` number, so don't pass `messaging_profile_id`. |
 | `TELNYX_MESSAGING_WEBHOOK_URL` | Where Telnyx sends incoming texts and delivery receipts. Present once the number is assigned and a webhook is set (your `webhook_url`, or a connected project). |
 | `TELNYX_PUBLIC_KEY` | Base64 Ed25519 public key for checking webhook signatures. Can arrive with the number rather than at install. |
 | `TELNYX_DASHBOARD_URL` | When present: a link that opens the Telnyx dashboard through Vercel sign-in. Append `?to=messaging` (10DLC registration) or `?to=verify` (identity check). Fine to show in a page; it still needs Vercel sign-in. |
