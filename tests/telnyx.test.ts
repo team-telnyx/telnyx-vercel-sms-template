@@ -57,7 +57,6 @@ describe("sendSms", () => {
       from: "+13125550100",
       to: "+14155550123",
       text: "hi",
-      messaging_profile_id: "profile-1",
     });
   });
 

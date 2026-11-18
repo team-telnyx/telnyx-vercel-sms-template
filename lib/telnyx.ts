@@ -44,7 +44,7 @@ export async function sendSms(to: string, text: string) {
       from,
       to,
       text,
-      messaging_profile_id: process.env.TELNYX_MESSAGING_PROFILE_ID,
+      // No messaging_profile_id: Telnyx picks the profile from `from`.
     });
     if (!res.data) throw new TelnyxError("Telnyx 200: the response had no message data", 502);
     return res.data;
