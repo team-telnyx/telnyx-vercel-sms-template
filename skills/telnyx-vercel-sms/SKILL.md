@@ -97,27 +97,37 @@ This pulls the Development environment. If you connected only some environments,
 
 | Variable | What it is |
 | --- | --- |
-| `TELNYX_API_KEY` | A Telnyx API key that can only send and read messages. Server-side only, never expose it to the browser. |
+| `TELNYX_TOKEN_URL` | Where server code exchanges the deployment's Vercel OIDC token for a short-lived Telnyx token (about an hour; send and read messages only). Not a secret. No Telnyx API key is stored in the project. |
+| `VERCEL_OIDC_TOKEN` | Written by `vercel env pull` for local work (valid 12 hours). On Vercel, read it with `getVercelOidcToken()` from `@vercel/oidc`. Never send it to the Telnyx API. |
 | `TELNYX_PHONE_NUMBER` | The number to send from, in E.164 (`+1...`). Only present after the identity check. |
 | `TELNYX_MESSAGING_PROFILE_ID` | Optional. The messaging profile the number belongs to. Not needed to send: Telnyx picks it from the `from` number, so don't pass `messaging_profile_id`. |
 | `TELNYX_MESSAGING_WEBHOOK_URL` | Where Telnyx sends incoming texts and delivery receipts. Present once the number is assigned and a webhook is set (your `webhook_url`, or a connected project). |
 | `TELNYX_PUBLIC_KEY` | Base64 Ed25519 public key for checking webhook signatures. Can arrive with the number rather than at install. |
 | `TELNYX_DASHBOARD_URL` | When present: a link that opens the Telnyx dashboard through Vercel sign-in. Append `?to=messaging` (10DLC registration) or `?to=verify` (identity check). Fine to show in a page; it still needs Vercel sign-in. |
 
-Before the identity check passes, expect only `TELNYX_API_KEY`, and maybe `TELNYX_PUBLIC_KEY`. Don't rename these or commit `.env.local`.
+Before the identity check passes, expect only `TELNYX_TOKEN_URL` and `TELNYX_DASHBOARD_URL`, and maybe `TELNYX_PUBLIC_KEY`. Don't rename these or commit `.env.local`.
+
+Numbers added before the switch to OIDC may still have `TELNYX_API_KEY`. If it's set, use it as the bearer token instead of exchanging; it disappears once the number is moved to OIDC.
 
 ## 5. Send a text
 
-From a terminal, after `vercel env pull` (load the file first, for example `set -a; . ./.env.local; set +a`):
+From a terminal, after `vercel env pull` (load the file first, for example `set -a; . ./.env.local; set +a`), get a token, then send:
 
 ```sh
+TELNYX_TOKEN=$(curl -s -X POST "$TELNYX_TOKEN_URL" \
+  -H "Authorization: Bearer $VERCEL_OIDC_TOKEN" \
+  -H 'content-type: application/json' \
+  -d "{\"phoneNumber\":\"$TELNYX_PHONE_NUMBER\"}" | jq -r .token)
+
 curl -X POST https://api.telnyx.com/v2/messages \
-  -H "Authorization: Bearer $TELNYX_API_KEY" \
+  -H "Authorization: Bearer $TELNYX_TOKEN" \
   -H "Content-Type: application/json" \
   -d "{\"from\":\"$TELNYX_PHONE_NUMBER\",\"to\":\"+14155550123\",\"text\":\"Hello from Vercel\"}"
 ```
 
-From Next.js, add a route handler. See [references/nextjs.md](references/nextjs.md) for the full `app/api/send/route.ts`, with and without the `telnyx` npm package. Rules:
+The token endpoint answers `{ token, tokenType, expiresAt, phoneNumber }`, or `{ error: { code, message } }` with 401 (bad or expired OIDC token), 403 (this project isn't connected to the number in this environment), 409 (several numbers connected: pass `phoneNumber`) or 429 (too many requests). Reuse a token until a few minutes before `expiresAt`.
+
+From Next.js, add a route handler. See [references/nextjs.md](references/nextjs.md) for the `getTelnyxToken()` helper and the full `app/api/send/route.ts`, with and without the `telnyx` npm package. Rules:
 
 - Put your own auth in front of the send route. Anyone who can call it can spend the user's balance. The samples check a `SEND_API_SECRET` bearer token as a placeholder and refuse everything while it is unset.
 - For a public demo page, the template's pattern needs no password: only text a phone that texted you first. The page shows a one-time code, the visitor texts it, the inbound webhook links that phone to the browser's session, and the send route reads the recipient from the session, never from the request. Add per-phone and daily limits. See [references/nextjs.md](references/nextjs.md).
@@ -156,7 +166,7 @@ If the production deployment sits behind Vercel Deployment Protection, Telnyx ca
 3. **Check delivery** with the message id from the send response:
    ```sh
    curl https://api.telnyx.com/v2/messages/MESSAGE_ID \
-     -H "Authorization: Bearer $TELNYX_API_KEY"
+     -H "Authorization: Bearer $TELNYX_TOKEN"
    ```
    `data.to[0].status` moves through `queued`, `sending`, `sent` to `delivered`. `sending_failed` or `delivery_failed` come with a code in `data.errors`. The same status arrives as `message.finalized` on the webhook.
 4. **Balance**: `vercel integration balance telnyx`. When no auto-recharge threshold is set, the CLI can fail here with `TypeError: Cannot read properties of undefined` (seen on CLI 55 and 65). Then read the balance on the resource in Vercel, or in the Telnyx dashboard (`vercel integration open telnyx`).
@@ -177,12 +187,14 @@ You can't register for the user, and code changes don't speed it up. Most reject
 | What you see | Cause | Fix |
 | --- | --- | --- |
 | `TELNYX_*` variables missing in the app | Resource not connected, or the deployment predates them | `vercel integration resource connect <resource-name> --yes`, then `vercel deploy --prod`. Locally, `vercel env pull .env.local` again. |
-| Only `TELNYX_API_KEY` (and maybe `TELNYX_PUBLIC_KEY`) present | Identity check not passed yet | User completes it via `vercel integration open telnyx`, then redeploy. |
+| Only `TELNYX_TOKEN_URL` and `TELNYX_DASHBOARD_URL` (and maybe `TELNYX_PUBLIC_KEY`) present | Identity check not passed yet | User completes it via `vercel integration open telnyx`, then redeploy. |
 | Send accepted, then `message.finalized` or the status check shows code **40010** (Not 10DLC registered), **47000**, or **40300** with registration wording | Sending to a US mobile before the 10DLC campaign is approved. Telnyx documents this failure under more than one code, so match the code and the error text | Expected until approval. See 10DLC above. |
 | Send refused with **40300** "Blocked due to STOP message" | The phone texted STOP to the number | Don't retry. The phone opts back in by texting START. |
 | Send refused with **40309** (Invalid destination region) or **40306** (Alpha sender not configured) | Destination is outside the US | Only US numbers can be texted. Validate `to` as `+1` and 10 digits before sending. |
-| HTTP **403** from the Telnyx API | The key only allows sending and reading messages. Numbers, profiles, billing and other endpoints are refused | Use the API only for `/v2/messages`. Manage everything else in the Telnyx dashboard or in Vercel. |
-| HTTP **401** from the Telnyx API | Wrong or missing `TELNYX_API_KEY`, or a key that was rotated more than 24 hours ago | Redeploy to pick up the current key. Rotating the key (dashboard, team admins) pushes the new key to connected projects. |
+| HTTP **403** from `TELNYX_TOKEN_URL` (`not_connected`) | This project isn't connected to the number in the environment it runs in | Connect it for that environment (`vercel integration resource connect <resource-name> --yes`), then redeploy. |
+| HTTP **401** from `TELNYX_TOKEN_URL` | The Vercel OIDC token is missing or expired | On Vercel, read it per request with `getVercelOidcToken()`. Locally, run `vercel env pull .env.local` again (it lasts 12 hours). |
+| HTTP **403** from the Telnyx API | The token only allows sending and reading messages. Numbers, profiles, billing and other endpoints are refused | Use the API only for `/v2/messages`. Manage everything else in the Telnyx dashboard or in Vercel. |
+| HTTP **401** from the Telnyx API | The short-lived token expired or was revoked, or an old `TELNYX_API_KEY` was revoked | Get a new token from `TELNYX_TOKEN_URL` and retry once. If an old `TELNYX_API_KEY` is still set, redeploy so the project picks up the current variables. |
 | `/api/telnyx/inbound` answers 401 | `TELNYX_PUBLIC_KEY` missing from this deployment, body parsed before verifying, or the request isn't from Telnyx | Redeploy after connecting. Verify against the raw `req.text()` body. |
 | No inbound requests at all | Route not at `app/api/telnyx/inbound`, not deployed to production, production protected, or a custom `webhook_url` points elsewhere | Check `TELNYX_MESSAGING_WEBHOOK_URL` (after `vercel env pull`) and deploy the route to production. |
 | Install stops: "There's already a Telnyx account for …" | The team email (a free email provider, so no plus-address) already has a Telnyx account | A known limitation. Linking an existing Telnyx account isn't supported yet. |
@@ -200,7 +212,7 @@ You can't register for the user, and code changes don't speed it up. Most reject
 
 - US local numbers only, sending to US numbers only. No voice, MMS, toll-free or short codes.
 - One prepaid balance per installation, shared by all its numbers. Refunds of unused credit go through `support@telnyx.com`.
-- The API key can only send and read messages.
+- The short-lived Telnyx token can only send and read messages, and lasts about an hour.
 - The inbound webhook is per installation, not per project. It points at the first project connected without a custom `webhook_url`.
 - Deleting the resource releases the number for good. Uninstalling closes the Telnyx account.
 

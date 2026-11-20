@@ -1,6 +1,43 @@
 # Next.js routes for Telnyx SMS on Vercel
 
-App Router route handlers, Node.js runtime (the default). Both versions read the `TELNYX_*` variables the integration adds. Pick one: plain `fetch` with no dependencies, or the `telnyx` npm package (v7 or later).
+App Router route handlers, Node.js runtime (the default). Both versions read the `TELNYX_*` variables the integration adds. Pick one: plain `fetch`, or the `telnyx` npm package (v7 or later).
+
+## Get a Telnyx token: `lib/telnyx-token.ts`
+
+No Telnyx API key is stored in the project. Exchange the deployment's Vercel OIDC token at `TELNYX_TOKEN_URL` for a short-lived Telnyx token (about an hour), and reuse it until 5 minutes before it expires. `npm install @vercel/oidc`
+
+```ts
+// lib/telnyx-token.ts
+import { getVercelOidcToken } from "@vercel/oidc";
+
+// A Vercel OIDC token addressed to Telnyx only.
+const AUDIENCE = "https://vercel.telnyx.com";
+
+let cached: { token: string; expiresAt: number } | null = null;
+
+export async function getTelnyxToken(): Promise<string> {
+  // Numbers added before the switch to OIDC may still have a key.
+  if (process.env.TELNYX_API_KEY) return process.env.TELNYX_API_KEY;
+  if (cached && cached.expiresAt - 5 * 60_000 > Date.now()) return cached.token;
+
+  const res = await fetch(process.env.TELNYX_TOKEN_URL!, {
+    method: "POST",
+    headers: {
+      // Only ever sent to TELNYX_TOKEN_URL, never to the Telnyx API.
+      Authorization: `Bearer ${await getVercelOidcToken({ audience: AUDIENCE })}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ phoneNumber: process.env.TELNYX_PHONE_NUMBER }),
+  });
+  const json = await res.json();
+  // 403 not_connected: connect the number to this project for this environment.
+  if (!res.ok) throw new Error(`Telnyx token ${res.status}: ${json.error?.message}`);
+  cached = { token: json.token, expiresAt: Date.parse(json.expiresAt) };
+  return json.token;
+}
+```
+
+If the Telnyx API answers 401, the token was revoked early (a rotation in Vercel): set `cached = null`, get a new token and retry once. The template's `lib/telnyx.ts` does this.
 
 ## Send: `app/api/send/route.ts`
 
@@ -9,6 +46,7 @@ App Router route handlers, Node.js runtime (the default). Both versions read the
 ```ts
 // app/api/send/route.ts
 import crypto from "node:crypto";
+import { getTelnyxToken } from "@/lib/telnyx-token";
 
 const US_E164 = /^\+1[2-9]\d{2}[2-9]\d{6}$/;
 
@@ -31,7 +69,7 @@ export async function POST(req: Request) {
   const res = await fetch("https://api.telnyx.com/v2/messages", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${process.env.TELNYX_API_KEY}`,
+      Authorization: `Bearer ${await getTelnyxToken()}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ from: process.env.TELNYX_PHONE_NUMBER, to, text }),
@@ -53,6 +91,7 @@ export async function POST(req: Request) {
 // app/api/send/route.ts
 import Telnyx from "telnyx";
 import crypto from "node:crypto";
+import { getTelnyxToken } from "@/lib/telnyx-token";
 
 const US_E164 = /^\+1[2-9]\d{2}[2-9]\d{6}$/;
 
@@ -73,7 +112,7 @@ export async function POST(req: Request) {
     return Response.json({ error: "Send { to: '+1XXXXXXXXXX', text }. US numbers only." }, { status: 400 });
   }
   // maxRetries: 0, because the SDK retries timeouts and 5xx by default, and a retried send can deliver the text twice.
-  const telnyx = new Telnyx({ apiKey: process.env.TELNYX_API_KEY, maxRetries: 0 });
+  const telnyx = new Telnyx({ apiKey: await getTelnyxToken(), maxRetries: 0 });
   try {
     const { data } = await telnyx.messages.send({ from: process.env.TELNYX_PHONE_NUMBER, to, text });
     return Response.json({ id: data?.id, status: data?.to?.[0]?.status });
@@ -140,10 +179,8 @@ import Telnyx from "telnyx";
 
 export async function POST(req: Request) {
   const raw = await req.text(); // raw body: verify before parsing
-  const telnyx = new Telnyx({
-    apiKey: process.env.TELNYX_API_KEY,
-    publicKey: process.env.TELNYX_PUBLIC_KEY,
-  });
+  // Verifying a webhook needs only the public key, no token.
+  const telnyx = new Telnyx({ apiKey: null, publicKey: process.env.TELNYX_PUBLIC_KEY });
   try {
     // Checks telnyx-signature-ed25519 over `${telnyx-timestamp}|${raw}`, 5-minute tolerance.
     await telnyx.webhooks.unwrap(raw, { headers: Object.fromEntries(req.headers) });

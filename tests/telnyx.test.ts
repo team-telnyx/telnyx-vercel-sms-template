@@ -2,12 +2,23 @@ import crypto from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { POST as inbound } from "@/app/api/telnyx/inbound/route";
 import { POST as send } from "@/app/api/send/route";
-import { sendSms, TelnyxError, verifyTelnyxWebhook } from "@/lib/telnyx";
+import {
+  getMessageStatus,
+  getTelnyxToken,
+  resetTelnyxTokenForTests,
+  sendSms,
+  TelnyxError,
+  verifyTelnyxWebhook,
+} from "@/lib/telnyx";
 import { setCacheForTests } from "@/lib/store";
 import { memoryCache } from "./helpers";
 
 // after() only works inside a Next.js request; the helper queues the callbacks instead.
 vi.mock("next/server", () => import("./helpers"));
+
+// The deployment's Vercel OIDC token, faked.
+const oidcMock = vi.hoisted(() => vi.fn());
+vi.mock("@vercel/oidc", () => ({ getVercelOidcToken: oidcMock }));
 
 // No test talks to Telnyx: the SDK's HTTP calls go to this fake fetch.
 const fetchMock = vi.fn();
@@ -28,6 +39,7 @@ function telnyxReply(status: number, body: unknown) {
 const sent = { data: { id: "msg-1", to: [{ phone_number: "+14155550123", status: "queued" }] } };
 
 beforeEach(() => {
+  resetTelnyxTokenForTests();
   setCacheForTests(memoryCache().cache);
   vi.stubGlobal("fetch", fetchMock);
   vi.stubEnv("TELNYX_API_KEY", "KEY_TEST");
@@ -70,8 +82,12 @@ describe("sendSms", () => {
     expect(err.status).toBe(422);
   });
 
-  it("refuses to send without an API key or number", async () => {
+  it("refuses to send without a way to get a token, or without a number", async () => {
     vi.stubEnv("TELNYX_API_KEY", "");
+    vi.stubEnv("TELNYX_TOKEN_URL", "");
+    await expect(sendSms("+14155550123", "hi")).rejects.toMatchObject({ status: 500 });
+    vi.stubEnv("TELNYX_API_KEY", "KEY_TEST");
+    vi.stubEnv("TELNYX_PHONE_NUMBER", "");
     await expect(sendSms("+14155550123", "hi")).rejects.toMatchObject({ status: 500 });
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -177,5 +193,168 @@ describe("POST /api/telnyx/inbound", () => {
     const res = await post(event("evt-hello", "hello"));
     expect(res.status).toBe(200);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("getTelnyxToken (Vercel OIDC)", () => {
+  const TOKEN_URL = "https://vercel.telnyx.com/api/token";
+  const HOUR = 60 * 60 * 1000;
+  const tokenReply = (token: string, inMs: number) =>
+    telnyxReply(200, {
+      token,
+      tokenType: "Bearer",
+      expiresAt: new Date(Date.now() + inMs).toISOString(),
+      phoneNumber: "+13125550100",
+    });
+
+  beforeEach(() => {
+    vi.stubEnv("TELNYX_API_KEY", "");
+    vi.stubEnv("TELNYX_TOKEN_URL", TOKEN_URL);
+    oidcMock.mockReset();
+    oidcMock.mockResolvedValue("VERCEL_OIDC_TEST");
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("exchanges the Vercel OIDC token, then sends with the Telnyx token", async () => {
+    fetchMock.mockResolvedValueOnce(tokenReply("TNX_SHORT_1", HOUR)).mockResolvedValueOnce(telnyxReply(200, sent));
+    const msg = await sendSms("+14155550123", "hi");
+    expect(msg.id).toBe("msg-1");
+
+    const [tokenUrl, tokenInit] = fetchMock.mock.calls[0];
+    expect(String(tokenUrl)).toBe(TOKEN_URL);
+    expect(tokenInit.method).toBe("POST");
+    expect(new Headers(tokenInit.headers).get("authorization")).toBe("Bearer VERCEL_OIDC_TEST");
+    expect(JSON.parse(tokenInit.body)).toEqual({ phoneNumber: "+13125550100" });
+
+    const [url, init] = fetchMock.mock.calls[1];
+    expect(String(url)).toBe("https://api.telnyx.com/v2/messages");
+    expect(new Headers(init.headers).get("authorization")).toBe("Bearer TNX_SHORT_1");
+  });
+
+  it("never sends the Vercel OIDC token to Telnyx", async () => {
+    fetchMock
+      .mockResolvedValueOnce(tokenReply("TNX_SHORT_1", HOUR))
+      .mockResolvedValueOnce(telnyxReply(200, sent))
+      .mockResolvedValueOnce(telnyxReply(200, sent));
+    await sendSms("+14155550123", "hi");
+    await getMessageStatus("msg-1");
+    const telnyxCalls = fetchMock.mock.calls.filter(([url]) => new URL(String(url)).host === "api.telnyx.com");
+    expect(telnyxCalls).toHaveLength(2);
+    for (const [, init] of telnyxCalls) {
+      expect(JSON.stringify([...new Headers(init.headers)])).not.toContain("VERCEL_OIDC_TEST");
+      expect(String(init.body ?? "")).not.toContain("VERCEL_OIDC_TEST");
+    }
+  });
+
+  it("reuses the token, and concurrent callers share one request", async () => {
+    fetchMock.mockImplementation(async (url: unknown) =>
+      String(url) === TOKEN_URL ? tokenReply("TNX_SHORT_1", HOUR) : telnyxReply(200, sent),
+    );
+    await Promise.all([sendSms("+14155550123", "a"), sendSms("+14155550123", "b")]);
+    await sendSms("+14155550123", "c");
+    const tokenCalls = fetchMock.mock.calls.filter(([url]) => String(url) === TOKEN_URL);
+    expect(tokenCalls).toHaveLength(1);
+    expect(oidcMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("gets a new token within 5 minutes of expiry", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    fetchMock
+      .mockResolvedValueOnce(tokenReply("TNX_SHORT_1", HOUR))
+      .mockResolvedValueOnce(telnyxReply(200, sent))
+      .mockResolvedValueOnce(tokenReply("TNX_SHORT_2", HOUR))
+      .mockResolvedValueOnce(telnyxReply(200, sent));
+    await sendSms("+14155550123", "a");
+    vi.setSystemTime(Date.now() + HOUR - 4 * 60 * 1000);
+    await sendSms("+14155550123", "b");
+    expect(String(fetchMock.mock.calls[2][0])).toBe(TOKEN_URL);
+    const [, init] = fetchMock.mock.calls[3];
+    expect(new Headers(init.headers).get("authorization")).toBe("Bearer TNX_SHORT_2");
+  });
+
+  it("uses TELNYX_API_KEY when the project still has one", async () => {
+    vi.stubEnv("TELNYX_API_KEY", "KEY_LEGACY");
+    await expect(getTelnyxToken()).resolves.toBe("KEY_LEGACY");
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(oidcMock).not.toHaveBeenCalled();
+  });
+
+  it("says what to do when TELNYX_TOKEN_URL isn't set", async () => {
+    vi.stubEnv("TELNYX_TOKEN_URL", "");
+    const err = await sendSms("+14155550123", "hi").catch((e) => e);
+    expect(err).toBeInstanceOf(TelnyxError);
+    expect(err.message).toMatch(/TELNYX_TOKEN_URL isn't set/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("says to run vercel env pull when there is no OIDC token", async () => {
+    oidcMock.mockRejectedValueOnce(new Error("no token"));
+    const err = await getTelnyxToken().catch((e) => e);
+    expect(err.message).toMatch(/vercel env pull/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("explains a 403: the project isn't connected to the number", async () => {
+    fetchMock.mockResolvedValueOnce(
+      telnyxReply(403, {
+        error: { code: "not_connected", message: "This project isn't connected to a Telnyx number in its development environment. Connect the number to the project in Vercel." },
+      }),
+    );
+    const err = await sendSms("+14155550123", "hi").catch((e) => e);
+    expect(err).toBeInstanceOf(TelnyxError);
+    expect(err.status).toBe(403);
+    expect(err.code).toBe("not_connected");
+    expect(err.message).toBe(
+      "Telnyx token 403 (not_connected): This project isn't connected to a Telnyx number in its development environment. Connect the number to the project in Vercel.",
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("passes on other token errors", async () => {
+    fetchMock.mockResolvedValueOnce(telnyxReply(429, { error: { code: "rate_limited", message: "Too many requests" } }));
+    const err = await getTelnyxToken().catch((e) => e);
+    expect(err.status).toBe(429);
+    expect(err.message).toBe("Telnyx token 429 (rate_limited): Too many requests");
+  });
+
+  it("asks Vercel for an OIDC token addressed to Telnyx", async () => {
+    fetchMock.mockResolvedValueOnce(tokenReply("TNX_SHORT_1", HOUR)).mockResolvedValueOnce(telnyxReply(200, sent));
+    await sendSms("+14155550123", "hi");
+    expect(oidcMock).toHaveBeenCalledWith({ audience: "https://vercel.telnyx.com" });
+  });
+
+  it("on a Telnyx 401, exchanges again once and retries once", async () => {
+    const unauthorized = () => telnyxReply(401, { errors: [{ code: "10009", detail: "Authentication failed" }] });
+    fetchMock
+      .mockResolvedValueOnce(tokenReply("TNX_SHORT_1", HOUR))
+      .mockResolvedValueOnce(unauthorized())
+      .mockResolvedValueOnce(tokenReply("TNX_SHORT_2", HOUR))
+      .mockResolvedValueOnce(telnyxReply(200, sent));
+    const msg = await sendSms("+14155550123", "hi");
+    expect(msg.id).toBe("msg-1");
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(new Headers(fetchMock.mock.calls[3][1].headers).get("authorization")).toBe("Bearer TNX_SHORT_2");
+
+    // A second 401 is passed on: no loop.
+    fetchMock.mockReset();
+    fetchMock
+      .mockResolvedValueOnce(unauthorized())
+      .mockResolvedValueOnce(tokenReply("TNX_SHORT_3", HOUR))
+      .mockResolvedValueOnce(unauthorized());
+    const err = await sendSms("+14155550123", "hi").catch((e) => e);
+    expect(err).toBeInstanceOf(TelnyxError);
+    expect(err.status).toBe(401);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("never retries a 401 with TELNYX_API_KEY", async () => {
+    vi.stubEnv("TELNYX_API_KEY", "KEY_TEST");
+    fetchMock.mockResolvedValueOnce(telnyxReply(401, { errors: [{ code: "10009", detail: "Authentication failed" }] }));
+    const err = await sendSms("+14155550123", "hi").catch((e) => e);
+    expect(err.status).toBe(401);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
