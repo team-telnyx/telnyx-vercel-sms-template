@@ -17,7 +17,7 @@ export default function Home() {
   const registerHref = dashboardLink("messaging");
 
   let body: React.ReactNode;
-  if (!process.env.TELNYX_API_KEY) {
+  if (!process.env.TELNYX_TOKEN_URL && !process.env.TELNYX_API_KEY) {
     body = <SetupCard step="Step 1 of 3" text="Add Telnyx to this project." action={{ label: "Add Telnyx", href: MARKETPLACE_URL }} />;
   } else if (!number) {
     body = (

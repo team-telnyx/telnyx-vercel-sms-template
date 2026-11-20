@@ -61,6 +61,8 @@ To add Telnyx to an existing project, add it from the Marketplace and connect th
 
 ## How sending is protected
 
+**No API key is stored in your project.** Each time it needs to call Telnyx, `lib/telnyx.ts` takes the deployment's Vercel OIDC token, addressed to Telnyx only (`getVercelOidcToken({ audience: "https://vercel.telnyx.com" })` from `@vercel/oidc`), and exchanges it at `TELNYX_TOKEN_URL` for a short-lived Telnyx token. The token lasts about an hour, can only send and read messages, and only works for a project connected to the number in that environment. The app keeps it in memory and gets a new one 5 minutes before it expires. Your Vercel OIDC token is only sent to `TELNYX_TOKEN_URL`, never to the Telnyx API.
+
 The send form has no password, and it's still safe on a public URL:
 
 - **It only texts a phone that texted first.** The page shows a one-time code (`PING 4F7K`). When a phone texts that code to your number, the webhook links the phone to that browser. The send route reads the recipient from the browser's session, never from the request, so a visitor can only text their own phone.
@@ -82,7 +84,7 @@ Everything that touches the cache is in `lib/store.ts`. Swap it for a database, 
 
 | Variable | Set by | Used for |
 | --- | --- | --- |
-| `TELNYX_API_KEY` | The integration, as soon as you add the number | A Telnyx key for this number that can only send and read messages. Keep it on the server. |
+| `TELNYX_TOKEN_URL` | The integration, as soon as you add the number | Where the app exchanges its Vercel OIDC token for a short-lived Telnyx token. It isn't a secret. |
 | `TELNYX_PHONE_NUMBER` | The integration, after the identity check | The number you send from, in E.164 format |
 | `TELNYX_MESSAGING_PROFILE_ID` | The integration, after the identity check | Optional. You don't need it to send: Telnyx picks the profile from the `from` number. |
 | `TELNYX_MESSAGING_WEBHOOK_URL` | The integration, after the identity check, once the number is connected to a project with Production or you set an inbound webhook URL on it | Where this number's incoming texts and delivery receipts go. When you connect a project with Production, it's that project's `/api/telnyx/inbound` route. If more than one production project uses the number, texts go to one of them, and you choose which in Telnyx. |
@@ -91,7 +93,9 @@ Everything that touches the cache is in `lib/store.ts`. Swap it for a database, 
 | `SEND_FORM_PASSWORD` | You, optional | Turns on **Send to any US number** on the home page |
 | `DAILY_SEND_LIMIT` | You, optional | Texts per day the page may send. Defaults to 25. |
 
-Before the identity check passes, only `TELNYX_API_KEY` is set. Variables added or changed after a deployment take effect on the next deployment.
+Before the identity check passes, only `TELNYX_TOKEN_URL` and `TELNYX_DASHBOARD_URL` are set. Variables added or changed after a deployment take effect on the next deployment.
+
+Numbers added before the switch to OIDC may still have a `TELNYX_API_KEY` variable. While it's set, the app uses it instead of `TELNYX_TOKEN_URL`. Vercel removes it once the number is moved to OIDC.
 
 ## Routes
 
@@ -106,6 +110,10 @@ Before the identity check passes, only `TELNYX_API_KEY` is set. Variables added 
 - **The home page says "Verify your identity to get your number".** The identity check hasn't passed yet. Redeploy once the number is assigned.
 - **The page doesn't update when you text.** Check that you're on the production domain: preview deployments don't receive texts. Redeploy if the deployment is older than connecting the number. On Pro with several function regions, the webhook and the page can land in different regions. On Hobby, the Runtime Cache pauses when the team's monthly allowance runs out. Your function logs for `/api/telnyx/inbound` show every text either way.
 - **Texts to this number go to a different project.** Each number sends its texts to one place. Open the number in Telnyx (from the integration in Vercel) to see where they go, and pick another connected project or enter a URL there.
+- **Sending fails with "Telnyx token 403".** This project isn't connected to the number in the environment it's running in (Production, Preview or Development). Connect it in Vercel under the number's **Projects**, then redeploy.
+- **Sending fails with "TELNYX_TOKEN_URL isn't set".** The deployment is older than connecting the number. Redeploy.
+- **Sending fails with "No Vercel OIDC token is available" locally.** Run `vercel env pull .env.local` again: the local OIDC token lasts 12 hours.
+- **The Telnyx API answers 401.** The token expired or was revoked. The app gets a new one and retries once by itself; if it keeps failing, check that the number is still connected to this project in Vercel.
 - **The inbound route answers 401.** Either `TELNYX_PUBLIC_KEY` is missing from this deployment, or the request didn't come from Telnyx. Redeploy after you connect the number.
 - **A text to a US mobile phone is "held by the carrier".** This is expected until your campaign is approved. Select **Register for US messaging**.
 - **Your phone isn't a US number.** You can text the page from any country, but it can only text US numbers back.
@@ -113,7 +121,7 @@ Before the identity check passes, only `TELNYX_API_KEY` is set. Variables added 
 ## Local development
 
 ```sh
-vercel link && vercel env pull .env.local   # or: cp .env.example .env.local and fill it in
+vercel link && vercel env pull .env.local   # also writes VERCEL_OIDC_TOKEN (valid 12 hours)
 npm install
 npm run dev
 npm test
