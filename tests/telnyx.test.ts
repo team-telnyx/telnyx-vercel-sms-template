@@ -241,7 +241,7 @@ describe("getTelnyxToken (Vercel OIDC)", () => {
       .mockResolvedValueOnce(telnyxReply(200, sent));
     await sendSms("+14155550123", "hi");
     await getMessageStatus("msg-1");
-    const telnyxCalls = fetchMock.mock.calls.filter(([url]) => String(url).startsWith("https://api.telnyx.com"));
+    const telnyxCalls = fetchMock.mock.calls.filter(([url]) => new URL(String(url)).host === "api.telnyx.com");
     expect(telnyxCalls).toHaveLength(2);
     for (const [, init] of telnyxCalls) {
       expect(JSON.stringify([...new Headers(init.headers)])).not.toContain("VERCEL_OIDC_TEST");
